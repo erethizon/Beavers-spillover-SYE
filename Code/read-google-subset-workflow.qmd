@@ -1,0 +1,77 @@
+---
+title: "Read-csv-google-drive"
+format: html
+editor: visual
+---
+
+##Overview
+
+When we pull the zooniverse classfication file down, it is huge, and always includes every single classification ever done on our project 🙁
+
+This qmd file helps us to filter to the correct classifcation and workflow version so we get only the data we need.
+
+## Set up workspace and read in CSV file
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(here)
+library(googledrive)
+```
+
+Here's how to read a csv stored in google drive
+
+Create file id to a file that is set to "anyone with the link" on google drive. Here's an example
+
+```{r}
+file_id <- "https://drive.google.com/file/d/15KFTBERA-lNsfVv-LMpTC9S3cm_MAZWL/view?usp=sharing"
+#need to pass the shared url for the correct csv file here
+```
+
+Now get drive info for file
+
+```{r}
+my_file <- drive_get(file_id) #pulls info from google drive for the file
+my_file$name #prints file name - check to make sure you have pulled correct file
+```
+
+Now read file
+
+```{r}
+df <-read_csv(drive_read_string(my_file))
+```
+
+## Subset to correct workflow and version
+
+The Zooniverse uses different "workflows," each of which can have different versions (as they are tweaked), for classfying images. We start by identifying the workflows present in our classification file.
+
+```{r}
+unique(df$workflow_id)
+unique(df$workflow_name)
+```
+
+The workflow we need to use is called "Species identification"
+
+Let's filter just to that
+
+```{r}
+df <- df |> filter(workflow_name == "Species identification")
+```
+
+Now we need to see how many versions there are of that worflow
+
+```{r}
+unique(df$workflow_version)
+```
+
+Generally, we'll want ids from the most current workflow version, in this case 32.13 so we filter to that.
+
+```{r}
+df <- df |> filter(workflow_version == 32.13)
+```
+
+This reduces us to a much smaller subset of the data.
+
+Next, refer to the qmd called "flatten_species_ids" to see how we get the classification data from the file.
+
+It assumes that you still have `df` in your workspace.
