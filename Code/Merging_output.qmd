@@ -1,0 +1,147 @@
+---
+title: "Compiling a Main Data Frame"
+format: html
+---
+
+Original Code from Aidan Fauth
+
+
+## Goal:
+
+In the following code, the output files from all the audio moth folders are compiled into a single 'main' data frame.
+
+
+## Set up
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(hms)
+library(here)
+```
+
+
+## Compiling and Formatting Data Frame
+
+Here we will take the folder containing all the output files and load them into list:
+
+```{r}
+file_list <- list.files(path = here("Data/BirdNet_Output"), pattern = "[0-9].csv$",)
+
+# read in all the files as dfs
+df_list <- map(file_list, \(x) read_csv(here("Data/BirdNet_Output", x)))
+
+# process each df to then bind_rows
+cleaned_list <- map(df_list, \(x) x |> relocate(file) |>
+  pivot_longer(4:ncol(x), names_to = "species", values_to = "probability") |>
+  filter(!is.na(probability)))
+
+# add a column with the AM name
+for (i in 1:length(cleaned_list)){
+  cleaned_list[[i]] <- cleaned_list[[i]] |> 
+    mutate(id = str_sub(file_list[[i]], start = 8, end = -5)) # AM names of variable length
+}
+
+# compile into single df
+temp_df <- bind_rows(cleaned_list)
+
+```
+
+```{r}
+table(temp_df$id) ## checking that both beaver and control deployments are included
+```
+
+
+### Create date and time variables
+
+```{r}
+# use the "start" variable for the seconds component of the temporal variables 
+# (could also use "end", but start makes more sense)
+main_df <- temp_df |> mutate(date = str_sub(file, start = 1, end = 8),
+          hour = str_sub(file, 10, 11),
+          minute = str_sub(file, 12, 13),
+          second = start) |> # changed from str_sub(file, 14, 15) bc the file name has no seconds
+  unite("date_time", c("date", "hour", "minute", "second"), sep = ":") |>
+  mutate(date_time = ymd_hms(date_time),
+          time = as_hms(date_time),
+         date = as.Date(date_time)) 
+
+## (my addition) added the date only column to the mutate
+```
+
+
+## write csv
+
+```{r}
+write_csv(main_df, here("Data/birdnet_results.csv"))
+```
+
+
+## Unite with Audio Moth Deployments
+
+Take a look at the deployment df
+```{r}
+deploy <- read_csv(here("Data/Beavers-2025.csv"))
+glimpse(deploy)
+```
+
+### Control Sites
+
+Read in full AM data to then filter to just the control sites. Next bind the control sites with the beaver deployment data to make joining smoother.
+
+```{r}
+full_am <- read_csv(here("Data/audio_moth_deployments.csv"))
+
+full_am |>
+  glimpse() ## notice two extra columns with no values
+
+## remove the extra columns
+full_am <- full_am |>
+  select(-"...8", -"...9") |>
+  glimpse()
+
+
+control_deploy <- full_am |>
+  filter(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065")
+
+glimpse(control_deploy)
+## now the two datasets have matching columns so can use bind_rows() to combine
+
+## need to adjust some classes for variables
+control_deploy <- control_deploy |>
+  mutate(height_above_ground_m = as.numeric(height_above_ground_m))
+
+deploy_combined <- bind_rows(deploy, control_deploy)
+```
+
+#### Merge dataframes
+
+```{r}
+merged <- left_join(deploy_combined, main_df, join_by("deployment_num" == "id"))
+glimpse(merged)
+```
+
+```{r}
+## make sure it worked by checking how many deployments are present
+table(merged$deployment_num)
+```
+
+
+
+
+## Save merged data to Data folder
+
+```{r}
+write_csv(merged, here("Data/merged_output_deployment.csv"))
+```
+
+
+
+
+
+
+
+
+
+
+

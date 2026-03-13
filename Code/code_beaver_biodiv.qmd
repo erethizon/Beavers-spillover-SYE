@@ -1,0 +1,365 @@
+---
+title: "Initial code for beaver spillover biodiversity"
+author: Liz Anderson
+format: html
+---
+
+Goals for this file:
+
+* Think about and start results to report in paper
+* Think about and start plots to report in paper
+
+
+## Set up
+
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+```
+
+
+Read in data (after running through the file `Merging_output.qmd`)
+
+```{r}
+results_deploy <- read.csv(here("Data/merged_output_deployment.csv"))
+birdnet_only <- read.csv(here("Data/birdnet_results.csv"))
+```
+
+## Dataset Modifictions
+
+Make a variable to differentiate beaver sites and control sites
+```{r}
+table(results_deploy$deployment_num)
+
+results_deploy <- results_deploy |>
+  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+
+table(results_deploy$treatment)
+
+results_deploy_final <- results_deploy |>
+  filter(deployment_num != "AM0065") 
+## note taking out this control site removed ~1,000 observations
+
+table(results_deploy_final$treatment)
+## note the extreme difference in observations between beaver sites and control sites
+```
+
+```{r}
+## separate the scientific name and common name for making better plots
+results_deploy_final <- results_deploy_final |>
+  separate(species, 
+           into = c("species_scientific", "species"),
+           sep = "_")
+```
+
+
+## Calculations
+
+* Number of AM days
+* Total minutes of recording
+* Species detected and how many times total
+* Species detected and how many times for each site
+* Diversity indices for each site
+* Diversity indices for each treatment group
+
+### Number of AM days 
+
+#### All sites
+```{r}
+## count the number of days
+length(unique(results_deploy_final$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_final |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_final |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+
+```
+
+#### beaver sites
+```{r}
+results_deploy_beaver <- results_deploy_final |>
+  filter(treatment == "beaver")
+
+## count the number of days
+length(unique(results_deploy_beaver$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_beaver |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_beaver |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+```
+
+#### control sites
+```{r}
+results_deploy_control <- results_deploy_final |>
+  filter(treatment == "control")
+
+## count the number of days
+length(unique(results_deploy_control$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_control |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_control |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+```
+Control sites had much fewer time detections and time detecting
+Only a 5 day difference in the number of days that detections were made on
+
+_Should calculate how long each detector was out and able to record for... not sure off top of my head how best to do this_
+
+
+### Species detected
+
+The species detected and how many times they were detected
+
+#### All sites
+```{r}
+library(pander)
+results_deploy_final |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+## the total number of species/sounds recorded across all sites
+length(unique(results_deploy_final$species))
+```
+
+#### Beavers
+
+```{r}
+## species list and number of detections
+results_deploy_beaver |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(results_deploy_beaver$species))
+```
+
+```{r}
+## species and number of detections at all beaver deployments (lumped)
+spp_numrec_depl_beaver <- results_deploy_beaver |>
+  group_by(deployment_num, species) |>
+  summarise(num_rec = n())
+spp_numrec_depl_beaver
+
+## the species and counts of each species recorded at each deployment (separated)
+
+## AM0063
+results_deploy_beaver |>
+  filter(deployment_num == "AM0063") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0064
+results_deploy_beaver |>
+  filter(deployment_num == "AM0064") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0081
+results_deploy_beaver |>
+  filter(deployment_num == "AM0081") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0083
+results_deploy_beaver |>
+  filter(deployment_num == "AM0083") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0087
+results_deploy_beaver |>
+  filter(deployment_num == "AM0087") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0094
+results_deploy_beaver |>
+  filter(deployment_num == "AM0094") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0095
+results_deploy_beaver |>
+  filter(deployment_num == "AM0095") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0096
+results_deploy_beaver |>
+  filter(deployment_num == "AM0096") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+```
+
+#### Control
+
+```{r}
+## species list and number of detections
+results_deploy_control |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(results_deploy_control$species)) ## more than half the number of species detected at beaver sites
+```
+
+
+```{r}
+## the species and counts of each species recorded at each beaver deployment (lumped)
+spp_numrec_depl_control <- results_deploy_control |>
+  group_by(deployment_num, species) |>
+  summarise(num_rec = n())
+spp_numrec_depl_control
+
+## the species and counts of each species recorded at each deployment (separated)
+
+## AM0063
+results_deploy_control |>
+  filter(deployment_num == "AM0067") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0064
+results_deploy_control |>
+  filter(deployment_num == "AM0066") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0081
+results_deploy_control |>
+  filter(deployment_num == "AM0086") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0083
+results_deploy_control |>
+  filter(deployment_num == "AM0089") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0087
+results_deploy_control |>
+  filter(deployment_num == "AM0075") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0094
+results_deploy_control |>
+  filter(deployment_num == "AM0073") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0095
+results_deploy_control |>
+  filter(deployment_num == "AM0074") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0096
+results_deploy_control |>
+  filter(deployment_num == "AM0090") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+```
+
+#### Comparison
+
+```{r}
+results_deploy_final |>
+  group_by(species, treatment) |>
+  summarise(num_detections = n())
+## this was not quite what I wanted... 
+
+# see half piece of paper for dataframe wanted (columns: spp, beaver sites, control sites)
+```
+
+
+
+
+## Plots
+
+### Beavers
+```{r}
+## work in progress
+
+ggplot(data = spp_numrec_depl_beaver, aes(x = species, y = num_rec)) +
+  geom_segment(aes(x = species, xend = species,
+                   y = 0, yend = num_rec)) +
+  geom_point() +
+  coord_flip() +
+  facet_wrap(~deployment_num, scales = "free") +
+  theme_bw() +
+  labs(x = "Number of recorded detections",
+       y = "Species")
+```
+
+### Control Sites
+```{r}
+ggplot(data = spp_numrec_depl_control, aes(x = species, y = num_rec)) +
+  geom_segment(aes(x = species, xend = species,
+                   y = 0, yend = num_rec)) +
+  geom_point() +
+  coord_flip() +
+  facet_wrap(~deployment_num, scales = "free") +
+  theme_bw() +
+  labs(x = "Number of recorded detections",
+       y = "Species")
+```
+
+
+## Species Accumulation Curve
+
+
+
+
+## Next steps:
+Species accumulation curve
+- pivoting wider...
+- assigning day numbers?
+- figure out specific table
+
+Calculate biodiversity indices with vegan
+
+Comparison metrics and models with biodiversity index as response
+
+Add a column for beaver sites about active beavers yes/no
+
+Add in other spatial data from GIS - distance to development, distance to water
+
+
+
+
+
+
+
