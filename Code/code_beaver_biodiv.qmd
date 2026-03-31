@@ -296,14 +296,14 @@ results_deploy_control |>
 #### Comparison
 
 ```{r}
-results_deploy_final |>
+species_treatment_wide_df <- results_deploy_final |>
   group_by(species, treatment) |>
-  summarise(num_detections = n())
-## this was not quite what I wanted... 
+  summarise(num_detections = n()) |> 
+  pivot_wider(names_from = treatment,
+              values_from = num_detections)
 
-# see half piece of paper for dataframe wanted (columns: spp, beaver sites, control sites)
 ```
-
+Scale by an interval for each detector (morning chunk, day, etc - chp5), then average for all detectors by treatment
 
 
 
@@ -358,8 +358,140 @@ Add a column for beaver sites about active beavers yes/no
 Add in other spatial data from GIS - distance to development, distance to water
 
 
+## 0.8 probability
+Filter to just the rows where the probability is greather than or equal to 0.8
+```{r}
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+```
+
+Check the species that were present and at which treatment with grouped and pivoted dataframe:
+```{r}
+## 0.8 and up probability
+highprob_wide_df <- highprob_results_deploy |>
+  group_by(species, treatment) |>
+  summarise(num_detections = n()) |>
+  pivot_wider(names_from = treatment,
+              values_from = num_detections)
 
 
+## compared to 0.4 and up probability
+species_treatment_wide_df
+highprob_wide_df
+```
+
+```{r}
+highprob_plot_df <- highprob_results_deploy |>
+  group_by(deployment_num, species, treatment) |>
+  summarise(num_rec = n())
+
+
+ggplot(data = highprob_plot_df, aes(x = species, y = num_rec, colour = treatment)) +
+  geom_segment(aes(x = species, xend = species,
+                   y = 0, yend = num_rec)) +
+  geom_point() +
+  coord_flip() +
+  facet_wrap(~deployment_num, scales = "free") +
+  theme_bw() +
+  labs(x = "Number of recorded detections",
+       y = "Species")
+```
+
+## plot detector date ranges
+
+```{r}
+ggplot(data = results_deploy_final, aes(x = date, color = treatment)) +
+  geom_bar() +
+  coord_flip() +
+  facet_grid(~deployment_num)
+```
+First day of a recording 9/21 (sept 21) 
+to last day of a recording 12/12 (dec 12)
+
+
+## Naive occupancy
+proportion of stations where species detected relative to the total number of stations sampled
+value ranges 0 to 1
+
+## day of year
+
+```{r}
+
+results_deploy_final$date <- as.Date(results_deploy_final$date)
+results_deploy_final
+
+results_deploy_final$day_of_year <- yday(results_deploy_final$date)
+results_deploy_final
+```
+Pivot data wider for use in vegan package 
+
+```{r}
+library(vegan)
+
+results_summarise <- results_deploy_final |>
+  group_by(deployment_num, treatment, species, day_of_year) |>
+  summarise(num_obsv = n())
+results_summarise
+
+results_wide <- results_summarise |>
+  pivot_wider(names_from = species,
+              values_from = num_obsv)
+
+results_wide[is.na(results_wide)] <- 0
+results_wide
+```
+
+## Ordination work - following along with Ordination-in-class R project
+```{r}
+SR <- specnumber(results_wide[4:41])
+
+PlotInfo <- results_wide[1:3]
+
+PlotInfo$Shannon <- diversity(results_wide[4:41], index = "shannon")
+
+```
+
+```{r}
+## ordination
+BirdOrd<-metaMDS(
+  results_wide[, 4:41], #tells vegan which columns just have species info
+  distance = "bray", #tells vegan what kind of distance to calculate
+  k = 2, #tells vegan that we want 2-d output
+  trymax = 50) #tells vegan the number of tries
+
+BirdOrd$stress ## check if the stress value is less than 0.2
+stressplot(BirdOrd)
+
+gof<-goodness(BirdOrd) #goodness of fit
+plot(BirdOrd, type = "t", main = "goodness of fit")
+points(BirdOrd, display = "sites", cex=gof*100) ## this didn't work
+
+```
+
+Plot results further
+```{r}
+ForPlotting <- fortify(BirdOrd) ## ran into issue here too
+```
+
+
+
+## species accumulation curve
+
+```{r}
+results_wide <- results_wide |>
+  relocate(day_of_year) 
+## tried putting day of year first because thought that was what specaccum was thinking of "x" as... didn't work
+
+results_wide |>
+  dplyr::select(-2, -3) |>
+  select(3:41) ### no clue why this isn't working
+
+accum <- specaccum(results_wide, method = "random") ## issue here
+
+
+specaccum(results_wide, method = "exact", permutations = 100,
+          conditioned =TRUE, gamma = "jack1",  w = NULL)
+```
 
 
 
