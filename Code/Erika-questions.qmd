@@ -1,0 +1,9 @@
+---
+title: "Erika's questions"
+format: html
+editor: visual
+---
+1. In the file `Code/Merging_output.qmd`, the file path does not take me to a directory that includes all of the birdnet output files. Can you show me how you read them in? I want to make sure we could do that in future.
+
+2. In the filed `Code/code_beaver_biodiv.qmd` I am not able to run line 23 because the desired file is not in the data folder. I think this is because you have .gitignore ignoring .csv files, which is good, but we need to fix this so that I can run the code. Let's add the files to a google drive and read them in from that drive (preferably, my drive, with you having read access. We can set this up during data night)
+
