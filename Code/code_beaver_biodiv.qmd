@@ -4,10 +4,6 @@ author: Liz Anderson
 format: html
 ---
 
-Goals for this file:
-
-* Think about and start results to report in paper
-* Think about and start plots to report in paper
 
 
 ## Set up
@@ -16,6 +12,7 @@ Goals for this file:
 rm(list=ls())
 library(here)
 library(tidyverse)
+library(vegan)
 ```
 
 
@@ -235,13 +232,13 @@ length(unique(results_deploy_control$species)) ## more than half the number of s
 
 
 ```{r}
-## the species and counts of each species recorded at each beaver deployment (lumped)
+## the species and counts of each species recorded at each control deployment (lumped)
 spp_numrec_depl_control <- results_deploy_control |>
   group_by(deployment_num, species) |>
   summarise(num_rec = n())
 spp_numrec_depl_control
 
-## the species and counts of each species recorded at each deployment (separated)
+## the species and counts of each species recorded at each control deployment (separated)
 
 ## AM0063
 results_deploy_control |>
@@ -293,7 +290,7 @@ results_deploy_control |>
 
 ```
 
-#### Comparison
+#### Wide data
 
 ```{r}
 species_treatment_wide_df <- results_deploy_final |>
@@ -302,6 +299,7 @@ species_treatment_wide_df <- results_deploy_final |>
   pivot_wider(names_from = treatment,
               values_from = num_detections)
 
+species_treatment_wide_df
 ```
 Scale by an interval for each detector (morning chunk, day, etc - chp5), then average for all detectors by treatment
 
@@ -384,7 +382,7 @@ highprob_wide_df
 highprob_plot_df <- highprob_results_deploy |>
   group_by(deployment_num, species, treatment) |>
   summarise(num_rec = n())
-
+highprob_plot_df
 
 ggplot(data = highprob_plot_df, aes(x = species, y = num_rec, colour = treatment)) +
   geom_segment(aes(x = species, xend = species,
@@ -400,36 +398,79 @@ ggplot(data = highprob_plot_df, aes(x = species, y = num_rec, colour = treatment
 ## plot detector date ranges
 
 ```{r}
-ggplot(data = results_deploy_final, aes(x = date, color = treatment)) +
-  geom_bar() +
-  coord_flip() +
-  facet_grid(~deployment_num)
-```
-First day of a recording 9/21 (sept 21) 
-to last day of a recording 12/12 (dec 12)
-
-
-## Naive occupancy
-proportion of stations where species detected relative to the total number of stations sampled
-value ranges 0 to 1
-
-## day of year
-
-```{r}
-
+## make a column for the numeric day of year
 results_deploy_final$date <- as.Date(results_deploy_final$date)
 results_deploy_final
 
 results_deploy_final$day_of_year <- yday(results_deploy_final$date)
 results_deploy_final
 ```
-Pivot data wider for use in vegan package 
+
+
+
+
+```{r}
+ggplot(data = results_deploy_final, aes(x = date, color = treatment)) +
+  geom_bar() +
+  coord_flip() +
+  facet_grid(~deployment_num) +
+  theme_minimal()
+```
+First day of a recording 9/21 (sept 21) 
+to last day of a recording 12/12 (dec 12)
+
+Recording range for each camera:
+```{r}
+results_deploy_final |>
+  group_by(deployment_num) |>
+  summarise(first_rec = min(date),
+            last_rec = max(date))
+
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(first_rec = min(date),
+         last_rec = max(date))
+
+## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
+```
+
+```{r}
+library(chron)
+library(reshape)
+library(plotrix)
+
+cam.days(results_deploy_final) ## function not working, can't be found
+```
+
+
+## Naive occupancy
+proportion of stations where species detected relative to the total number of stations sampled
+value ranges 0 to 1
+
+good to talk about if the beaver sites are similar or different to each other
+
+ do multiple - across all, across beaver, across control for each species to see differences
+
+## Pivot data wider for use in vegan package 
 
 ```{r}
 library(vegan)
 
-results_summarise <- results_deploy_final |>
+results_summarise_day <- results_deploy_final |>
   group_by(deployment_num, treatment, species, day_of_year) |>
+  summarise(num_obsv = n())
+results_summarise_day
+
+results_wide_day <- results_summarise_day |>
+  pivot_wider(names_from = species,
+              values_from = num_obsv)
+
+results_wide_day[is.na(results_wide_day)] <- 0
+results_wide_day
+
+
+results_summarise <- results_deploy_final |>
+  group_by(deployment_num, treatment, species) |>
   summarise(num_obsv = n())
 results_summarise
 
@@ -443,18 +484,25 @@ results_wide
 
 ## Ordination work - following along with Ordination-in-class R project
 ```{r}
-SR <- specnumber(results_wide[4:41])
+SR_day <- specnumber(results_wide_day[4:41])
 
-PlotInfo <- results_wide[1:3]
+PlotInfo_day <- results_wide_day[1:3]
 
-PlotInfo$Shannon <- diversity(results_wide[4:41], index = "shannon")
+PlotInfo_day$Shannon <- diversity(results_wide_day[4:41], index = "shannon")
 
+
+SR <- specnumber(results_wide[3:40])
+
+PlotInfo <- results_wide[1:2]
+
+PlotInfo$Shannon <- diversity(results_wide[3:40], index = "shannon")
+PlotInfo
 ```
 
 ```{r}
 ## ordination
 BirdOrd<-metaMDS(
-  results_wide[, 4:41], #tells vegan which columns just have species info
+  results_wide[, 3:40], #tells vegan which columns just have species info
   distance = "bray", #tells vegan what kind of distance to calculate
   k = 2, #tells vegan that we want 2-d output
   trymax = 50) #tells vegan the number of tries
@@ -466,6 +514,7 @@ gof<-goodness(BirdOrd) #goodness of fit
 plot(BirdOrd, type = "t", main = "goodness of fit")
 points(BirdOrd, display = "sites", cex=gof*100) ## this didn't work
 
+PlotInfo
 ```
 
 Plot results further
@@ -478,20 +527,28 @@ ForPlotting <- fortify(BirdOrd) ## ran into issue here too
 ## species accumulation curve
 
 ```{r}
-results_wide <- results_wide |>
+results_wide_day <- results_wide_day |>
   relocate(day_of_year) 
 ## tried putting day of year first because thought that was what specaccum was thinking of "x" as... didn't work
 
-results_wide |>
-  dplyr::select(-2, -3) |>
-  select(3:41) ### no clue why this isn't working
+results_wide_day |>
+  dplyr::select(-2, -3) ### not sure why this isn't working
 
-accum <- specaccum(results_wide, method = "random") ## issue here
+accum <- specaccum(results_wide_day, method = "random") ## issue here
 
 
-specaccum(results_wide, method = "exact", permutations = 100,
+specaccum(results_wide_day, method = "exact", permutations = 100,
           conditioned =TRUE, gamma = "jack1",  w = NULL)
 ```
+
+```{r}
+acc.curve(results_wide_day)
+```
+
+```{r}
+source(here("Code/TEAM library 1.7.R"))
+```
+
 
 
 
