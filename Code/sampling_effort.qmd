@@ -117,7 +117,7 @@ First arrange data by deployment, recording start date, species
 results_deploy_final <- results_deploy_final |>
   arrange(deployment_num, first_rec, species) 
 
-View(results_deploy_final)
+#View(results_deploy_final)
 ```
 
 What do I want the final data frame structure to be?
@@ -128,6 +128,7 @@ Create placeholder dataframe
 ```{r}
 species_accum <- data.frame(
   deployment_num = character(),
+  treatment = character(),
   date = POSIXct(),
   num_sp_today = integer(),
   num_sp_shared_yesterday = integer(),
@@ -139,26 +140,47 @@ species_accum <- data.frame(
 Prepare method to loop through data
 ```{r}
 deployments <- unique(results_deploy_final$deployment_num)
+beavers <- c("AM0063","AM0064","AM0081","AM0083", "AM0087","AM0094","AM0095","AM0096")
+#empty list to hold lists of species per detector
+#create list using deployments so that each list element is named to a particular deployment
+
+sp_list_by_deployment <- sapply(deployments, function(x) NULL)
+
+#second empty list to hold lists of cumulative species per detector
+cum_sp_list_by_deployment <- sapply(deployments, function(x) NULL)
 
 #start loop
 for(i in 1:length(deployments)){
   my_deployment <- deployments[i]
-  temp_df <- results_deploy_final|> filter(deployment_num == my_deployment)
+  if(my_deployment %in% beavers){
+    my_treatment <- "beavers"} else {
+      my_treatment <- "control"
+    }
+  temp_df <- results_deploy_final|> filter(deployment_num == my_deployment) |> arrange(deployment_num, date_time)
   
   #second loop to isolate days
   days <- unique(temp_df$date)
   #empty list to hold species lists
   sp_list_by_day <- vector(mode = "list", length = length(days))
   
+  #second empty list to hold cumulative species lists
+  cum_sp_by_day <- vector(mode = "list", length = length(days))
+  
   for(a in 1:length(days)){
     my_date <- days[a]
     
     day_df <- temp_df |> filter(date == my_date)
     num_sp_today <- n_distinct(day_df$species)
+    
+    ##track which species are listed that day -- for debugging -- delete when working
+    sp_for_day <- unique(day_df$species)
+    print(sp_for_day)
+    ##
+    
     sp_list_by_day[[a]] <- unique(day_df$species)
     if (a == 1){
       num_sp_shared_yesterday <- 0} else {
-        num_sp_shared_yesterday <- n_distinct(intersect(sp_list_by_day[[a-1]], sp_list_by_day[[a]]))
+      num_sp_shared_yesterday <- n_distinct(intersect(sp_list_by_day[[a-1]], sp_list_by_day[[a]]))
       }
     if (a == 1){
       num_new_sp <- num_sp_today } else {
@@ -166,17 +188,37 @@ for(i in 1:length(deployments)){
       }
    
      if (a == 1){
-      cum_list <- sp_list_by_day[[a]]} else {cum_list <- c(sp_list_by_day[[a-1]],sp_list_by_day[[a]])}
+      cum_list <- sp_list_by_day[[a]]} else {cum_list <- c(cum_sp_by_day[[a-1]],sp_list_by_day[[a]])}
+    #now get rid of duplicates
     cum_list <- unique(cum_list)
+    cum_list
+    #add species to cumulative list of species by day
+    cum_sp_by_day[[a]] <- cum_list
+    
+    
     cum_num_species <- n_distinct(cum_list)
     
-    temp_output <- as.data.frame(list(my_deployment, my_date, num_sp_today, num_sp_shared_yesterday, num_new_sp, cum_num_species))
+    temp_output <- as.data.frame(list(my_deployment, my_treatment, my_date, num_sp_today, num_sp_shared_yesterday, num_new_sp, cum_num_species))
    
       names(temp_output) <- names(species_accum)
 
     species_accum <- rbind(species_accum, temp_output)
 
   }
+  
+  #now add the species list by day for a single deployment to the list of species lists by deployment
+  sp_list_by_deployment[[i]] <- sp_list_by_day
 }
 ```
+Now plot species accumulation
+ 
+```{r}
+ggplot(species_accum, aes(date, cum_num_species, group = deployment_num, color = treatment))+
+  geom_line()+
+  labs(x = "Date", y = "Cumulative number of species")+
+  theme_bw()+
+  theme(legend.position="none")
+  
+```
+
 
