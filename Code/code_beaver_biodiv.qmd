@@ -289,20 +289,103 @@ results_deploy_control |>
   summarise(num_rec = n())
 
 ```
+## Scaling
 
-#### Wide data
+Notes:
+* For this detector for species - total detections divided by total days detector out
+* Could then multiply by 10 days to standardize if weird number ^
+* Then can use this data for vegan -- controlling for effort
 
 ```{r}
-species_treatment_wide_df <- results_deploy_final |>
+## Get the number of recording days (note this code is earlier too)
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(first_rec = min(date),
+         last_rec = max(date))
+
+## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(recording_days = last_rec - first_rec)
+
+## to look at these columns:
+results_deploy_final |>
+  relocate(first_rec, last_rec, recording_days)
+
+## range of recording days:
+results_deploy_final |>
+  ggplot(aes(x = recording_days))+
+  geom_histogram()
+
+results_deploy_final |>
+  group_by(treatment) |>
+  summarise(
+    min_days = min(recording_days),
+    max_days = max(recording_days)
+  ) |>
+  pander()
+## looks fairly equal between the treatments
+```
+
+```{r}
+## group by detector and species and count the total number of detections
+## then divide by the number of days the detector recorded for (recording_days)
+
+## recording days needs to be numeric, not as a time
+
+results_deploy_final <- results_deploy_final |>
+  mutate(recording_days = as.numeric(recording_days)) |>
+  relocate(recording_days)
+
+detections_perdeploy_perspp <- results_deploy_final |>
+  group_by(deployment_num, species, recording_days) |>
+  summarise(num_detections = n())
+  
+
+## get the average number of detections per 10 days
+scaled_detections <- detections_perdeploy_perspp |>
+  mutate(scaled_num_detections = (num_detections / recording_days) * 10)
+scaled_detections
+
+
+## join that to the big dataset? - this didn't work right
+left_join(results_deploy_final, scaled_detections, join_by(deployment_num == deployment_num)) |>
+  view()
+```
+#### Wide data
+```{r}
+## try pivoting wider with the scaled numbers
+## also filtered out engine and dog here
+results_wide_scaled <- scaled_detections |>
+  select(-3, -4) |>
+  filter(species != "Engine" & species != "Dog") |>
+  pivot_wider(names_from = species,
+              values_from = scaled_num_detections)
+
+results_wide_scaled[is.na(results_wide_scaled)] <- 0
+
+results_wide_scaled <- results_wide_scaled |>
+  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+
+results_wide_scaled
+```
+
+
+
+```{r}
+species_by_treatment_df <- results_deploy_final |>
   group_by(species, treatment) |>
   summarise(num_detections = n()) |> 
   pivot_wider(names_from = treatment,
               values_from = num_detections)
+species_by_treatment_df
 
-species_treatment_wide_df
+## would be good to remake with scaled data...
+
 ```
-Scale by an interval for each detector (morning chunk, day, etc - chp5), then average for all detectors by treatment
-
 
 
 ## Plots
@@ -366,7 +449,7 @@ highprob_results_deploy <- results_deploy_final |>
 Check the species that were present and at which treatment with grouped and pivoted dataframe:
 ```{r}
 ## 0.8 and up probability
-highprob_wide_df <- highprob_results_deploy |>
+highprob_by_treatment_df <- highprob_results_deploy |>
   group_by(species, treatment) |>
   summarise(num_detections = n()) |>
   pivot_wider(names_from = treatment,
@@ -374,8 +457,8 @@ highprob_wide_df <- highprob_results_deploy |>
 
 
 ## compared to 0.4 and up probability
-species_treatment_wide_df
-highprob_wide_df
+species_by_treatment_df
+highprob_by_treatment_df
 ```
 
 ```{r}
@@ -452,8 +535,9 @@ good to talk about if the beaver sites are similar or different to each other
  do multiple - across all, across beaver, across control for each species to see differences
 
 ## Pivot data wider for use in vegan package 
-
+_Note that pivoting for vegan correctly occurred in the "scaling" - "wide data" section earlier in this file._
 ```{r}
+## this is not scaled
 library(vegan)
 
 results_summarise_day <- results_deploy_final |>
@@ -484,33 +568,49 @@ results_wide
 
 ## Ordination work - following along with Ordination-in-class R project
 ```{r}
-SR_day <- specnumber(results_wide_day[4:41])
+results_wide_scaled
+results_scaled_vegan
 
-PlotInfo_day <- results_wide_day[1:3]
+## I calculate spp richness and shannon index down below, so don't need to do again here...
+Div_Indices
 
-PlotInfo_day$Shannon <- diversity(results_wide_day[4:41], index = "shannon")
+## also this old code calculates by day which isn't what we want
+
+# SR_day <- specnumber(results_wide_day[4:41])
+
+# PlotInfo_day <- results_wide_day[1:3]
+
+# PlotInfo_day$Shannon <- diversity(results_wide_day[4:41], index = "shannon")
 
 
-SR <- specnumber(results_wide[3:40])
+# SR <- specnumber(results_wide[3:40])
 
-PlotInfo <- results_wide[1:2]
+# PlotInfo <- results_wide[1:2]
 
-PlotInfo$Shannon <- diversity(results_wide[3:40], index = "shannon")
-PlotInfo
+# PlotInfo$Shannon <- diversity(results_wide[3:40], index = "shannon")
+# PlotInfo
 ```
 
 ```{r}
-## ordination
-BirdOrd<-metaMDS(
-  results_wide[, 3:40], #tells vegan which columns just have species info
+### ordination
+
+## replacing results_wide with the scaled version - results_wide_scaled
+
+## The following code block creates an object by running the `metaMDS` function in the `vegan` package. This function conducts a NMDS ordination.
+
+BirdOrd <- metaMDS(
+  results_wide_scaled[, 3:38], #tells vegan which columns just have species info
   distance = "bray", #tells vegan what kind of distance to calculate
   k = 2, #tells vegan that we want 2-d output
   trymax = 50) #tells vegan the number of tries
 
+
+## Stress is a measure of how well our two-dimensional representation captures the information in our 16-dimensional space (the 16 species). In general, stress values need to be less than 0.2 to be acceptable.
+
 BirdOrd$stress ## check if the stress value is less than 0.2
 stressplot(BirdOrd)
 
-gof<-goodness(BirdOrd) #goodness of fit
+gof <- goodness(BirdOrd) #goodness of fit
 plot(BirdOrd, type = "t", main = "goodness of fit")
 points(BirdOrd, display = "sites", cex=gof*100) ## this didn't work
 
@@ -519,8 +619,51 @@ PlotInfo
 
 Plot results further
 ```{r}
+## The first step is to use a function called `fortify` to rearrange the output into a long-format dataframe familiar to ggplot2. Then we can make a basic plot. Then we will spruce up our basic plot.
+
 ForPlotting <- fortify(BirdOrd) ## ran into issue here too
 ```
+```{r}
+## Now lets repair the labels in ForPlotting to represent deployment names
+ForPlotting$label[1:8] <- PlotInfo$deployment_num
+```
+
+Now we will make our plots from the new ForPlotting dataframe.
+
+Basic plot:
+```{r}
+ggplot(ForPlotting, aes(nmds1,nmds2,group = score))+
+   geom_text(aes(label=label, color = score))+
+   scale_color_manual(values = c(sites = "brown", species = "green"))+
+   geom_point(aes(color=score, shape =score))+
+   scale_color_manual(values = c(sites = "red", species = "black"))
+```
+Improved plot:
+```{r}
+ggplot()+
+   geom_point(data = subset(ForPlotting, score =="sites"),
+              mapping = aes(x = NMDS1, y = NMDS2),
+              alpha = 0.8)+
+   geom_segment(data=subset(ForPlotting, score == "species"),
+                mapping = aes(x = 0, y = 0, xend = NMDS1,   yend=NMDS2),
+                 arrow = arrow(length = unit(0.015, "npc"),
+               type = "closed"),
+                 color = "darkgray",
+                 size = 1,
+               alpha = 0.8)+
+   geom_text(data = subset(ForPlotting, score == "species"),
+             mapping = aes(label = label, x = NMDS1*1.1, y=NMDS2*1.1), alpha = 0.8)+
+   geom_abline(intercept = 0, slope = 0, linetype = "dashed", size = 0.8, color = "gray")+
+   geom_vline(aes(xintercept = 0), linetype = "dashed", size = 0.8, color = "gray")+
+   theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      axis.line = element_line(color = "black"),
+      legend.position = "none")
+```
+
+This is code up to line 181 in the intro-ordination-example.qmd file -- haven't run yet because of issues with early code.
 
 
 
@@ -553,7 +696,7 @@ source(here("Code/TEAM library 1.7.R"))
 
 
 ## Scaling
-This section might make more sense to have earlier in the file
+__Copied this section up above...__
 
 Notes:
 * For this detector for species - total detections divided by total days detector out
@@ -637,6 +780,7 @@ results_wide_scaled
 ```
 
 ## Calculate diversity indices
+Use the species_wide_scaled dataset that was created up above in the "Scaling" section
 ```{r}
 library(vegan) #turns on package for calculating diversity indices
 library(betapart) #turns on package for beta diversity (needed for Jaccard)
@@ -694,5 +838,71 @@ ggplot(Div_Long, aes(x = fct_reorder(deployment_num, treatment), y = Value, grou
   coord_flip() +
   theme_bw()
 ```
+
 ### Jaccard index
+
+```{r}
+Jaccard <- betadiver(results_scaled_vegan, "j") #j indicates to use the a/a+b+c formula
+#result is of class 'distance' - convert to a matrix
+Jaccard <- as.matrix(Jaccard)
+```
+
+_Determine the shared species between sites:_
+
+Now use `betapart`package to get shared species between sites. The function requires a set of presence/absence rather than abundance data so we have to convert our DF dataset to that.
+
+```{r}
+#requires a dataset of presence/absence data so make that first
+PresAb<-results_scaled_vegan
+	
+PresAb[][PresAb[] != 0]<- 1 #assigns all values > 0  to 1 
+PresAb
+```
+Now we can run the function to get the number of shared species between each pair of plots.
+
+```{r}
+Beta<-betapart.core(PresAb)#result is a list; we just need one part
+Shared<-Beta$shared
+## this is little a, the number of species shared between the communities
+```
+
+_Create our display matrix_
+
+Now it would be ideal if we could create a matrix with number of shared species ("a") above the diagonal, species richness of each plot along the diagonal, and Jaccard index below the diagonal.
+
+Let's start by adding row and column names to our existing matrices to keep track of things.
+
+```{r}
+row.names(Jaccard)<-Div_Indices$deployment_num
+colnames(Jaccard)<-Div_Indices$deployment_num
+
+row.names(Shared)<-Div_Indices$deployment_num
+colnames(Shared)<-Div_Indices$deployment_num
+
+## adds row and column names so can see which communities are being compared
+```
+
+Since we want the number of shared species above the diagonal, let's start with the shared matrix. Conveniently, it also has the number of species per plot as its diagonal.
+
+So all we really need to do is put the Jaccard data below the diagonal.
+
+```{r}
+#using base r
+Shared[lower.tri(Shared)] <- Jaccard[lower.tri(Jaccard, diag = FALSE)]
+
+## puts jaccard below the diagonal
+
+Shared
+```
+
+Write matrix and diversity indices to a csv:
+```{r}
+write.csv(Shared, here("Output","AudioDivMatrix.csv"), row.names = F)
+## row.names=F stops an extra column with row names
+
+
+## div indices
+write.csv(Div_Indices, here("Output", "AudioDiversity.csv"), row.names = F)
+```
+
 
