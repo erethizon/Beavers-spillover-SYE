@@ -552,3 +552,147 @@ source(here("Code/TEAM library 1.7.R"))
 
 
 
+## Scaling
+This section might make more sense to have earlier in the file
+
+Notes:
+* For this detector for species - total detections divided by total days detector out
+* Could then multiply by 10 days to standardize if weird number ^
+* Then can use this data for vegan -- controlling for effort
+
+```{r}
+## Get the number of recording days (note this code is earlier too)
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(first_rec = min(date),
+         last_rec = max(date))
+
+## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(recording_days = last_rec - first_rec)
+
+## to look at these columns:
+results_deploy_final |>
+  relocate(first_rec, last_rec, recording_days)
+
+## range of recording days:
+results_deploy_final |>
+  ggplot(aes(x = recording_days))+
+  geom_histogram()
+
+results_deploy_final |>
+  group_by(treatment) |>
+  summarise(
+    min_days = min(recording_days),
+    max_days = max(recording_days)
+  ) |>
+  pander()
+## looks fairly equal between the treatments
+```
+```{r}
+## group by detector and species and count the total number of detections
+## then divide by the number of days the detector recorded for (recording_days)
+
+## recording days needs to be numeric, not as a time
+
+results_deploy_final <- results_deploy_final |>
+  mutate(recording_days = as.numeric(recording_days)) |>
+  relocate(recording_days)
+
+detections_perdeploy_perspp <- results_deploy_final |>
+  group_by(deployment_num, species, recording_days) |>
+  summarise(num_detections = n())
+  
+
+## get the average number of detections per 10 days
+scaled_detections <- detections_perdeploy_perspp |>
+  mutate(scaled_num_detections = (num_detections / recording_days) * 10)
+scaled_detections
+
+
+## join that to the big dataset? - this didn't work right
+left_join(results_deploy_final, scaled_detections, join_by(deployment_num == deployment_num)) |>
+  view()
+```
+
+```{r}
+## try pivoting wider with the scaled numbers
+## also filtered out engine and dog here
+results_wide_scaled <- scaled_detections |>
+  select(-3, -4) |>
+  filter(species != "Engine" & species != "Dog") |>
+  pivot_wider(names_from = species,
+              values_from = scaled_num_detections)
+
+results_wide_scaled[is.na(results_wide_scaled)] <- 0
+
+results_wide_scaled <- results_wide_scaled |>
+  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+
+results_wide_scaled
+```
+
+## Calculate diversity indices
+```{r}
+library(vegan) #turns on package for calculating diversity indices
+library(betapart) #turns on package for beta diversity (needed for Jaccard)
+library(rstatix) #turns on package with some matrix maniuplation functions
+
+## finish setting up my dataframe to use in vegan (remove the extra columns)
+Div_Indices <- results_wide_scaled[,1:2]
+
+results_scaled_vegan <- results_wide_scaled[,-(1:2)]
+results_scaled_vegan
+
+## Species Richness
+Div_Indices$SR <- specnumber(results_scaled_vegan)
+Div_Indices
+
+## Simpson's Index
+Div_Indices$Simpson <- diversity(results_scaled_vegan, index = "simpson")
+Div_Indices
+
+## Shannon Index
+Div_Indices$Shannon <- diversity(results_scaled_vegan, index = "shannon")
+Div_Indices
+
+## summary statistics
+# filter to beaver and control so can be compared
+Div_Indices_Beaver <- Div_Indices |>
+  filter(treatment == "beaver")
+
+Div_Indices_Control <- Div_Indices |>
+  filter(treatment == "control")
+
+Div_Ind_Summary_all <- do.call(cbind, lapply(Div_Indices, summary))
+Div_Ind_Summary
+
+Div_Ind_Summary_beaver <- do.call(cbind, lapply(Div_Indices_Beaver, summary))
+Div_Ind_Summary_beaver
+
+Div_Ind_Summary_control <- do.call(cbind, lapply(Div_Indices_Control, summary))
+Div_Ind_Summary_control
+
+Div_Ind_Summary_beaver ## Median values are higher for all indices of the beaver sites
+Div_Ind_Summary_control
+```
+Visualize the diversity indices:
+```{r}
+## pivot to longer format
+Div_Long <- Div_Indices |>
+  pivot_longer(cols = SR:Shannon, names_to = "Index", values_to = "Value")
+
+
+## plot
+ggplot(Div_Long, aes(x = fct_reorder(deployment_num, treatment), y = Value, group = Index, color = treatment))+
+  geom_point(size = 2) +
+  facet_wrap(~Index, scales = "free") +
+  coord_flip() +
+  theme_bw()
+```
+### Jaccard index
+
