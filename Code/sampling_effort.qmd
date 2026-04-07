@@ -120,5 +120,63 @@ results_deploy_final <- results_deploy_final |>
 View(results_deploy_final)
 ```
 
+What do I want the final data frame structure to be?
 
+columns for deployment number, date, num_species_today, num_sp_shared_yesterday, num_new_species, cum_num_species
+
+Create placeholder dataframe
+```{r}
+species_accum <- data.frame(
+  deployment_num = character(),
+  date = POSIXct(),
+  num_sp_today = integer(),
+  num_sp_shared_yesterday = integer(),
+  num_new_sp = integer(),
+  cum_num_species = integer()
+)
+```
+
+Prepare method to loop through data
+```{r}
+deployments <- unique(results_deploy_final$deployment_num)
+
+#start loop
+for(i in 1:length(deployments)){
+  my_deployment <- deployments[i]
+  temp_df <- results_deploy_final|> filter(deployment_num == my_deployment)
+  
+  #second loop to isolate days
+  days <- unique(temp_df$date)
+  #empty list to hold species lists
+  sp_list_by_day <- vector(mode = "list", length = length(days))
+  
+  for(a in 1:length(days)){
+    my_date <- days[a]
+    
+    day_df <- temp_df |> filter(date == my_date)
+    num_sp_today <- n_distinct(day_df$species)
+    sp_list_by_day[[a]] <- unique(day_df$species)
+    if (a == 1){
+      num_sp_shared_yesterday <- 0} else {
+        num_sp_shared_yesterday <- n_distinct(intersect(sp_list_by_day[[a-1]], sp_list_by_day[[a]]))
+      }
+    if (a == 1){
+      num_new_sp <- num_sp_today } else {
+        num_new_sp <- length(setdiff(sp_list_by_day[[a]], sp_list_by_day[[a-1]]))
+      }
+   
+     if (a == 1){
+      cum_list <- sp_list_by_day[[a]]} else {cum_list <- c(sp_list_by_day[[a-1]],sp_list_by_day[[a]])}
+    cum_list <- unique(cum_list)
+    cum_num_species <- n_distinct(cum_list)
+    
+    temp_output <- as.data.frame(list(my_deployment, my_date, num_sp_today, num_sp_shared_yesterday, num_new_sp, cum_num_species))
+   
+      names(temp_output) <- names(species_accum)
+
+    species_accum <- rbind(species_accum, temp_output)
+
+  }
+}
+```
 
