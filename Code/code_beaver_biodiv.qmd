@@ -347,9 +347,12 @@ scaled_detections <- detections_perdeploy_perspp |>
   mutate(scaled_num_detections = (num_detections / recording_days) * 10)
 scaled_detections
 
+## reduce to just the columns needed
+scaled_join_test <- scaled_detections |>
+  select(deployment_num, species, scaled_num_detections)
 
 ## join that to the big dataset? - this didn't work right
-left_join(results_deploy_final, scaled_detections, join_by(deployment_num == deployment_num)) |>
+left_join(results_deploy_final, scaled_join_test, by = c("deployment_num", "species")) |>
   view()
 ```
 #### Wide data
@@ -838,6 +841,41 @@ ggplot(Div_Long, aes(x = fct_reorder(deployment_num, treatment), y = Value, grou
   coord_flip() +
   theme_bw()
 ```
+
+```{r}
+Div_Indices |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            mean_Shannon = mean(Shannon),
+            mean_Simpson = mean(Simpson))
+
+SR_plot <- ggplot(data = Div_Indices, aes(x = treatment, y = SR)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw()
+
+Simpson_plot <- ggplot(data = Div_Indices, aes(x = treatment, y = Simpson)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Simpson's Index") +
+  theme_bw()
+
+Shannon_plot <- ggplot(data = Div_Indices, aes(x = treatment, y = Shannon)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Shannon Index") +
+  theme_bw()
+
+
+ggsave(here("Output", "SR_Plot.jpg"), plot = SR_plot, width = 6, height = 11, units = "in")
+
+ggsave(here("Output", "Simpson_Plot.jpg"), plot = Simpson_plot, width = 6, height = 11, units = "in")
+
+ggsave(here("Output", "Shannon_Plot.jpg"), plot = Shannon_plot, width = 6, height = 11, units = "in")
+```
+
+
 
 ### Jaccard index
 
