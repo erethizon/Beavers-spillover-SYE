@@ -5,7 +5,6 @@ format: html
 
 Original Code from Aidan Fauth
 
-
 ## Goal:
 
 In the following code, the output files from all the audio moth folders are compiled into a single 'main' data frame.
