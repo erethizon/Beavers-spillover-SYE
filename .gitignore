@@ -6,3 +6,5 @@
 .csv
 *.csv
 /Data
+.jpg
+.png

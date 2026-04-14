@@ -1,0 +1,366 @@
+---
+title: "Beaver Biodiversity High Probability"
+format: html
+---
+
+This document will run through similar code to the the `code_beaver_biodiv.qmd` file but with the filtered data to high BirdNet probability (>0.8)
+
+
+
+## Set up
+
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+```
+
+```{r}
+results_deploy_final <- read.csv(here("Data", "results_final.csv"))
+```
+
+Scale by 10 detection days and filter
+```{r}
+results_deploy_final |>
+  mutate(date = ymd(date)) |>
+  group_by(deployment_num) |>
+  summarise(first_rec = min(date),
+            last_rec = max(date))
+
+results_deploy_final <- results_deploy_final |>
+  mutate(date = ymd(date)) |>
+  group_by(deployment_num) |>
+  mutate(first_rec = min(date),
+         last_rec = max(date))
+
+## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
+
+results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(recording_days = last_rec - first_rec)
+
+glimpse(results_deploy_final)
+
+## to look at these columns:
+results_deploy_final |>
+  relocate(first_rec, last_rec, recording_days)
+
+
+## range of recording days:
+results_deploy_final |>
+  ggplot(aes(x = recording_days))+
+  geom_histogram()
+
+results_deploy_final |>
+  group_by(treatment) |>
+  summarise(
+    min_days = min(recording_days),
+    max_days = max(recording_days)
+  ) |>
+  pander()
+## looks fairly equal between the treatments
+```
+
+
+__Filter__ to just the rows where the probability is greater than or equal to 0.8
+```{r}
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+```
+
+Check the range of recording days again with the high prob data:
+```{r}
+## range of recording days:
+highprob_results_deploy |>
+  ggplot(aes(x = recording_days))+
+  geom_histogram()
+
+highprob_results_deploy |>
+  group_by(treatment) |>
+  summarise(
+    min_days = min(recording_days),
+    max_days = max(recording_days)
+  ) |>
+  pander()
+## same values as not filtered to high prob
+
+
+## now do the scaling with the filtered data:
+
+highprob_results_deploy <- highprob_results_deploy |>
+  mutate(recording_days = as.numeric(recording_days)) |>
+  relocate(recording_days)
+
+detections_perdeploy_perspp_highp <- highprob_results_deploy |>
+  group_by(deployment_num, species, recording_days, treatment) |>
+  summarise(num_detections = n())
+  
+## get the average number of detections per 10 days
+scaled_detections_highp <- detections_perdeploy_perspp_highp |>
+  mutate(scaled_num_detections = (num_detections / recording_days) * 10)
+scaled_detections_highp
+
+
+```
+### table for poster
+```{r}
+avg_detections_spp_table_high <- scaled_detections_highp |>
+  relocate(treatment) |>
+  select(c("treatment", "deployment_num", "species", "scaled_num_detections")) |>
+  group_by(treatment, species) |>
+  summarise(mean_detections_10days = mean(scaled_num_detections))
+
+avg_detections_spp_table_wide_high <- avg_detections_spp_table_high |>
+  pivot_wider(names_from = treatment, 
+              values_from = mean_detections_10days)
+ 
+avg_detections_spp_table_wide_high[is.na(avg_detections_spp_table_wide_high)] <- 0
+
+avg_detections_spp_table_wide_rounded_high <- avg_detections_spp_table_wide_high |>
+  mutate(across(c(beaver, control), round, digits = 3)) |>
+  mutate(Species = species,
+         Beaver = beaver,
+         Control = control) |>
+  select(c("Species", "Beaver", "Control"))
+
+library(gt)
+
+gt_table <- gt(avg_detections_spp_table_wide_rounded_high)
+
+gtsave(gt_table, here("Output", "spp_table.png"))
+```
+
+
+
+
+```{r}
+## Not scaled
+highprob_by_treatment_df <- highprob_results_deploy |>
+  group_by(species, treatment) |>
+  summarise(num_detections = n()) |>
+  pivot_wider(names_from = treatment,
+              values_from = num_detections)
+
+## Scaled
+highprob_by_treatment_df <- scaled_detections_highp |>
+  group_by(species, treatment) |>
+  summarise(mean_detections = mean(scaled_num_detections)) |>
+  pivot_wider(names_from = treatment,
+              values_from = mean_detections)
+```
+
+```{r}
+highprob_plot_df <- highprob_results_deploy |>
+  group_by(deployment_num, species, treatment) |>
+  summarise(num_rec = n())
+highprob_plot_df
+
+ggplot(data = highprob_plot_df, aes(x = species, y = num_rec, colour = treatment)) +
+  geom_segment(aes(x = species, xend = species,
+                   y = 0, yend = num_rec)) +
+  geom_point() +
+  coord_flip() +
+  facet_wrap(~deployment_num, scales = "free") +
+  theme_bw() +
+  labs(x = "Number of recorded detections",
+       y = "Species")
+
+
+## try a diff way to get the scaled
+ggplot(data = scaled_detections_highp, aes(x = species, y = scaled_num_detections, colour = treatment, group = treatment)) +
+  geom_segment(aes(x = species, xend = species,
+                   y = 0, yend = scaled_num_detections)) +
+  geom_point() +
+  coord_flip() +
+  facet_wrap(~deployment_num, scales = "free") +
+  theme_bw() +
+  labs(y = "Number of detections per 10 days",
+       x = "Species")
+```
+Pivot wider
+```{r}
+results_wide_high_scaled <- scaled_detections_highp |>
+  ungroup() |>
+  relocate(recording_days, num_detections) |>
+  select(-recording_days, -num_detections) |>
+  filter(species != "Engine" & species != "Dog") |>
+  pivot_wider(names_from = species,
+              values_from = scaled_num_detections)
+
+results_wide_high_scaled[is.na(results_wide_high_scaled)] <- 0
+
+## not needed here:
+
+# results_wide_high_scaled <- results_wide_high_scaled |>
+#  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+#                             true = "control",
+#                             false = "beaver")) |>
+#  relocate(deployment_num, treatment) 
+
+results_wide_high_scaled
+```
+remove recording days and num detections
+
+## Diversity indices
+
+```{r}
+library(vegan) #turns on package for calculating diversity indices
+library(betapart) #turns on package for beta diversity (needed for Jaccard)
+library(rstatix) #turns on package with some matrix maniuplation functions
+
+
+## finish setting up my dataframe to use in vegan (remove the extra columns)
+Div_Indices_high <- results_wide_high_scaled[,1:2]
+
+results_scaled_vegan_high <- results_wide_high_scaled[,-(1:2)]
+results_scaled_vegan_high
+
+## Species Richness
+Div_Indices_high$SR <- specnumber(results_scaled_vegan_high)
+Div_Indices_high
+
+## Simpson's Index
+Div_Indices_high$Simpson <- diversity(results_scaled_vegan_high, index = "simpson")
+Div_Indices_high
+
+## Shannon Index
+Div_Indices_high$Shannon <- diversity(results_scaled_vegan_high, index = "shannon")
+Div_Indices_high
+
+## summary statistics
+# filter to beaver and control so can be compared
+Div_Indices_Beaver_high <- Div_Indices_high |>
+  filter(treatment == "beaver")
+
+Div_Indices_Control_high <- Div_Indices_high |>
+  filter(treatment == "control")
+
+Div_Ind_Summary_all_high <- do.call(cbind, lapply(Div_Indices_high, summary))
+Div_Ind_Summary_all_high
+
+Div_Ind_Summary_beaver_high <- do.call(cbind, lapply(Div_Indices_Beaver_high, summary))
+Div_Ind_Summary_beaver_high
+
+Div_Ind_Summary_control_high <- do.call(cbind, lapply(Div_Indices_Control_high, summary))
+Div_Ind_Summary_control_high
+
+Div_Ind_Summary_beaver_high ## Median values are higher for all indices of the beaver sites
+Div_Ind_Summary_control_high
+```
+Visualize the diversity indices:
+```{r}
+## pivot to longer format
+Div_Long_high <- Div_Indices_high |>
+  pivot_longer(cols = SR:Shannon, names_to = "Index", values_to = "Value")
+
+
+## plot
+full_div_plot_high <- ggplot(Div_Long_high, aes(x = fct_reorder(deployment_num, treatment), y = Value, group = Index, color = treatment))+
+  geom_point(size = 2) +
+  facet_wrap(~Index, scales = "free") +
+  labs(x = "Deployment number", color = "Treatment") +
+  coord_flip() +
+  theme_bw()
+full_div_plot_high
+
+# ggsave(here("Output", "HIGH_full_div_plot.jpg"), plot = full_div_plot_high, width = 10, height = 7, units = "in")
+```
+
+```{r}
+Div_Indices_high |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            mean_Shannon = mean(Shannon),
+            mean_Simpson = mean(Simpson))
+
+SR_plot_high <- ggplot(data = Div_Indices_high, aes(x = treatment, y = SR)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw()
+
+Simpson_plot_high <- ggplot(data = Div_Indices_high, aes(x = treatment, y = Simpson)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Simpson's Index") +
+  theme_bw()
+
+Shannon_plot_high <- ggplot(data = Div_Indices_high, aes(x = treatment, y = Shannon)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Shannon Index") +
+  theme_bw()
+
+SR_plot_high
+Simpson_plot_high
+Shannon_plot_high
+
+# ggsave(here("Output", "HIGH_SR_Plot.jpg"), plot = SR_plot_high, width = 6, height = 11, units = "in")
+
+# ggsave(here("Output", "HIGH_Simpson_Plot.jpg"), plot = Simpson_plot_high, width = 6, height = 11, units = "in")
+
+# ggsave(here("Output", "HIGH_Shannon_Plot.jpg"), plot = Shannon_plot_high, width = 6, height = 11, units = "in")
+```
+
+### t-test
+
+```{r}
+# "t.test(Ozone ~ Garden.location, data = ozone)
+# t.test(response variable ~ predictor variable, data = dataframe)"
+
+t.test(Shannon ~ treatment, data = Div_Indices_high) ## not significant
+
+t.test(Simpson ~ treatment, data = Div_Indices_high) ## not significant
+
+t.test(SR ~ treatment, data = Div_Indices_high) ## not significant
+```
+
+
+
+
+
+## Placeholder for Jaccard Index
+
+
+
+## Landcover data
+
+```{r}
+lulc <- read.csv(here("Data", "LULC_spillover_diversity.csv"))
+glimpse(lulc)
+```
+To do:
+* Convert to long
+* filter to just the percentages
+
+```{r}
+lulc_long <- lulc |>
+  select(1, 2, 17:29) |>
+  pivot_longer(cols = 3:15, names_to = "land_type", values_to = "percent_area")
+```
+
+Join to Div_Indices dataframe so that can be used in a model with div indices as response
+```{r}
+Div_Indices_high_joined <- left_join(Div_Indices_high, lulc_long, by = join_by(deployment_num == DEPLOYMENT_NUM))
+Div_Indices_high
+```
+
+mutate for treatment
+pivot 
+
+
+
+
+
+## Stat tests
+_Stat tests to run:_
+
+* test to see if diff in div indices is significantly different -- paired t-test...
+* multiple regression model to see what the best predictors of div indices are
+   - predictors: percent of land type, beaver vs control, active beavers or not, distance to ___
+   
+
+
+

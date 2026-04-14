@@ -18,7 +18,8 @@ library(pander)
 
 Read in data
 ```{r}
-results_deploy_final <- read_csv(here("Data/results_deploy_final.csv"))
+# results_deploy_final <- read_csv(here("Data/results_deploy_final.csv"))
+results_deploy_final <- read_csv(here("Data/results_final.csv"))
 ```
 
 ## Calculations
@@ -220,5 +221,54 @@ ggplot(species_accum, aes(date, cum_num_species, group = deployment_num, color =
   theme(legend.position="none")
   
 ```
+```{r}
+### Really want to order this so that beavers is the top 8 and control the bottom 8!!
 
+spp_accum_plot <- ggplot(species_accum, aes(x = date, y = cum_num_species, group = treatment, color = treatment))+
+  geom_line()+
+  labs(x = "Date", y = "Cumulative number of species")+
+  geom_smooth(method = "gam")+ # got many warnings so may not be good
+  theme_bw()+
+ # theme(legend.position="none") +
+  facet_wrap(~ deployment_num, scales = "fixed") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(strip.background = element_rect(fill = "#edf8b1", colour = "black"))
+
+# ggsave(here("Output", "spp_accum_plot.jpg"), plot = spp_accum_plot, width = 13.4, height = 7.4, units = "in")
+
+```
+
+```{r}
+## attempt to order better
+order_test <- species_accum |>
+  arrange(deployment_num, treatment)
+
+order_test <- order_test |>
+  mutate(FacetVar = factor(paste(deployment_num, treatment, sep = " - "), 
+                           levels = unique(paste(deployment_num, treatment, sep = " - "))))
+
+ggplot(order_test, aes(date, cum_num_species, group = deployment_num, color = treatment))+
+  geom_line()+
+  labs(x = "Date", y = "Cumulative number of species")+
+  geom_smooth(method = loess)+ # got many warnings so may not be good
+  theme_bw()+
+  theme(legend.position="none") +
+  facet_wrap(~FacetVar) +
+  scale_color_brewer(palette = "Accent")
+
+
+## try relveling by hand
+### this didn't work
+relevel_plot <- species_accum |>
+  mutate(depl_by_treatment = fct_relevel("AM0063", "AM0064", "AM0081", "AM0083", "AM0087", "AM0094", "AM0095", "AM0096", "AM0067", "AM0066", "AM0086", "AM0089", "AM0075", "AM0073", "AM0074", "AM0090"))
+
+ggplot(relevel_plot, aes(x = date, y = cum_num_species, group = deployment_num, color = treatment))+
+  geom_line()+
+  labs(x = "Date", y = "Cumulative number of species")+
+  geom_smooth(method = loess)+ # got many warnings so may not be good
+  theme_bw()+
+  theme(legend.position="none") +
+  facet_wrap(~ deployment_num, scales = "fixed") +
+  scale_color_brewer(palette = "Accent")
+```
 
