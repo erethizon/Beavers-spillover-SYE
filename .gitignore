@@ -6,5 +6,5 @@
 .csv
 *.csv
 /Data
-.jpg
-.png
+*.jpg
+*.png
