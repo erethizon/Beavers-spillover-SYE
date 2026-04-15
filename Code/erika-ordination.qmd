@@ -5,9 +5,11 @@ editor: visual
 ---
 
 ## Overview
+
 Liz is working on an ordination of beaver vs. control sites and is running into an issue with being able to use ggplot for ordination plots - there is a code break when using `fortify`. Here I'm seeing if I can figure out what's going on.
 
 ## Copy code from Liz
+
 This comes from `code_beaver_bidiv.qmd` But I'm deleting to just the code for the ordination
 
 ## Set up
@@ -21,8 +23,9 @@ library(vegan)
 library(ggvegan)
 library(ggpubr)
 library(ggrepel)
-```
 
+
+```
 
 Read in data (after running through the file `Merging_output.qmd`)
 
@@ -34,6 +37,7 @@ birdnet_only <- read.csv(here("Data/birdnet_results.csv"))
 ## Dataset Modifictions
 
 Make a variable to differentiate beaver sites and control sites
+
 ```{r}
 table(results_deploy$deployment_num)
 
@@ -72,9 +76,7 @@ results_deploy_final$day_of_year <- yday(results_deploy_final$date)
 results_deploy_final
 ```
 
-
-
-## Pivot data wider for use in vegan package 
+## Pivot data wider for use in vegan package
 
 ```{r}
 library(vegan)
@@ -106,6 +108,7 @@ results_wide
 ```
 
 ## Ordination work - following along with Ordination-in-class R project
+
 ```{r}
 SR <- specnumber(results_wide[3:40])
 
@@ -133,15 +136,14 @@ plot(BirdOrd, type = "t", main = "goodness of fit")
 ```
 
 Plot results further
+
 ```{r}
 ForPlotting <- fortify(BirdOrd) ## ran into issue here too
 ```
 
 Ok! That's good!
 
-Now we will make our plots from the new ForPlotting dataframe.
-## ggplots
-### Make a basic plot
+Now we will make our plots from the new ForPlotting dataframe. \## ggplots \### Make a basic plot
 
 ```{r}
 ggplot(ForPlotting, aes(nmds1,nmds2,group = score))+
@@ -218,8 +220,9 @@ p1<-ggplot()+
     panel.grid.minor = element_blank(),
     panel.background = element_blank(),
     axis.line = element_line(color = "black"),
-    legend.position = "none")
-  #scale_color_discrete("Forest")
+    legend.position = "right") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(color = "Treatment")
 p1
 ```
 
@@ -266,4 +269,8 @@ Finally, plot them together using `ggpubr`
 ```{r}
 BeaverOrdination<-ggarrange(p1,p2,ncol = 1)
 BeaverOrdination
+
+ggsave(here("Output", "BeaverOrdination.jpg"), plot = BeaverOrdination, width = 11.24, height = 10.9, units = "in")
+
+
 ```
