@@ -13,6 +13,14 @@ rm(list=ls())
 library(here)
 library(tidyverse)
 library(vegan)
+
+theme_teach<-function(){
+  theme(
+  #modify text, axis
+  axis.text = element_text(color = "black", size = 12),
+  axis.title = element_text(color = "black", size = 16)
+  )
+}
 ```
 
 
@@ -384,41 +392,7 @@ left_join(results_deploy_final, scaled_join_test, by = c("deployment_num", "spec
 
 ### Table for poster
 Species in each treatment and scaled detections
-Ideally avg detections per day
-```{r}
-avg_detections_spp_table <- scaled_detections |>
-  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
-                             true = "control",
-                             false = "beaver")) |>
-  relocate(treatment) |>
-  select(c("treatment", "deployment_num", "species", "scaled_num_detections")) |>
-  group_by(treatment, species) |>
-  summarise(mean_detections_10days = mean(scaled_num_detections))
-
-avg_detections_spp_table_wide <- avg_detections_spp_table |>
-  pivot_wider(names_from = treatment, 
-              values_from = mean_detections_10days)
- 
-avg_detections_spp_table_wide[is.na(avg_detections_spp_table_wide)] <- 0
-
-avg_detections_spp_table_wide_rounded <- avg_detections_spp_table_wide |>
-  mutate(across(c(beaver, control), round, digits = 3))
-
-library(gt)
-
-gt(data = avg_detections_spp_table_wide_rounded)
-
-
-
-
-# avg_detections_spp_table_wide_rounded |>
-#  pander()
-
-
-
-
-```
-
+_Did in high prob qmd file_
 
 
 
@@ -756,7 +730,7 @@ full_div_plot
 
 # ggsave(here("Output", "full_div_plot.jpg"), plot = full_div_plot, width = 10, height = 7, units = "in")
 ```
-
+### plot div indices
 ```{r}
 Div_Indices |>
   group_by(treatment) |>
@@ -769,6 +743,20 @@ SR_plot <- ggplot(data = Div_Indices, aes(x = treatment, y = SR)) +
   geom_point() +
   labs(x = "Treatment", y = "Species Richness") +
   theme_bw()
+
+SR_plot_flip <- ggplot(data = Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  theme_teach() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+  
+ggsave(here("Output", "SR_Plot_flip.jpg"), plot = SR_plot_flip, width = 11.25, height = 4.5, units = "in")
+
+
 
 Simpson_plot <- ggplot(data = Div_Indices, aes(x = treatment, y = Simpson)) +
   geom_boxplot()+
@@ -903,18 +891,7 @@ _Stat tests to run:_
    - predictors: percent of land type, beaver vs control, active beavers or not, distance to ___
    
 
-## paired t-test
 
-```{r}
-# "t.test(Ozone ~ Garden.location, data = ozone)
-# t.test(response variable ~ predictor variable, data = dataframe)"
-
-t.test(Shannon ~ treatment, data = Div_Indices) ## signif!
-
-t.test(Simpson ~ treatment, data = Div_Indices) ## signif!
-
-t.test(SR ~ treatment, data = Div_Indices) ## signif!
-```
 
 
 

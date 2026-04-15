@@ -14,6 +14,14 @@ rm(list=ls())
 library(here)
 library(tidyverse)
 library(vegan)
+
+theme_teach<-function(){
+  theme(
+  #modify text, axis
+  axis.text = element_text(color = "black", size = 12),
+  axis.title = element_text(color = "black", size = 16)
+  )
+}
 ```
 
 ```{r}
@@ -119,18 +127,54 @@ avg_detections_spp_table_wide_high <- avg_detections_spp_table_high |>
 avg_detections_spp_table_wide_high[is.na(avg_detections_spp_table_wide_high)] <- 0
 
 avg_detections_spp_table_wide_rounded_high <- avg_detections_spp_table_wide_high |>
-  mutate(across(c(beaver, control), round, digits = 3)) |>
+  mutate(across(c(beaver, control), round, digits = 1)) |>
   mutate(Species = species,
          Beaver = beaver,
          Control = control) |>
   select(c("Species", "Beaver", "Control"))
 
-library(gt)
+#library(gt)
 
-gt_table <- gt(avg_detections_spp_table_wide_rounded_high)
+#gt_table <- gt(avg_detections_spp_table_wide_rounded_high)
 
-gtsave(gt_table, here("Output", "spp_table.png"))
+#gtsave(gt_table, here("Output", "spp_table.png"))
 ```
+
+
+
+```{r}
+prop_sites <- scaled_detections_highp |>
+  ungroup() |>
+  select(c("deployment_num", "species", "treatment", "scaled_num_detections")) |>
+  relocate(treatment) |>
+  group_by(species, treatment) |>
+  summarise(num_sites = n_distinct(deployment_num)) |>
+  mutate(perc_sites = num_sites / 8) |>
+  pivot_wider(names_from = treatment, 
+              values_from = perc_sites) |>
+  mutate(beaver = replace_na(beaver, 0)) |>
+  mutate(control = replace_na(control, 0)) |>
+  mutate(across(c(beaver, control), round, 4)) |>
+  mutate(prop_beaver = beaver) |>
+  mutate(prop_control = control) |>
+  select(-c("num_sites", "beaver", "control"))
+
+# write.csv(prop_sites, here("Output", "prop_sites.csv"))
+# write.csv(avg_detections_spp_table_wide_rounded_high, here("Output", "avg_spp_detections.csv"))
+
+## then did join manually in R to get proportion beaver and control sites in the data frame
+rm(table1)
+```
+
+Now want to arrange the rows for better understanding
+```{r}
+table1_df <- read.csv(here("Output", "table1.csv"))
+
+table1_df <- table1_df |>
+  arrange(desc(PropBeaverSites))
+write.csv(table1_df, here("Output", "table1_updated.csv"))
+```
+
 
 
 
@@ -267,6 +311,7 @@ full_div_plot_high
 
 # ggsave(here("Output", "HIGH_full_div_plot.jpg"), plot = full_div_plot_high, width = 10, height = 7, units = "in")
 ```
+### plot div indices
 
 ```{r}
 Div_Indices_high |>
@@ -279,7 +324,21 @@ SR_plot_high <- ggplot(data = Div_Indices_high, aes(x = treatment, y = SR)) +
   geom_boxplot()+
   geom_point() +
   labs(x = "Treatment", y = "Species Richness") +
-  theme_bw()
+  theme_bw() +
+  theme_teach()
+
+SR_plot_high_flip <- ggplot(data = Div_Indices_high, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  theme_teach() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+
+
+
 
 Simpson_plot_high <- ggplot(data = Div_Indices_high, aes(x = treatment, y = Simpson)) +
   geom_boxplot()+
@@ -297,7 +356,10 @@ SR_plot_high
 Simpson_plot_high
 Shannon_plot_high
 
-# ggsave(here("Output", "HIGH_SR_Plot.jpg"), plot = SR_plot_high, width = 6, height = 11, units = "in")
+ggsave(here("Output", "HIGH_SR_Plot2.jpg"), plot = SR_plot_high, width = 11.25, height = 4.5, units = "in")
+
+ggsave(here("Output", "HIGH_SR_Plot2_flip.jpg"), plot = SR_plot_high_flip, width = 11.25, height = 4.5, units = "in")
+
 
 # ggsave(here("Output", "HIGH_Simpson_Plot.jpg"), plot = Simpson_plot_high, width = 6, height = 11, units = "in")
 
@@ -336,10 +398,109 @@ To do:
 * filter to just the percentages
 
 ```{r}
-lulc_long <- lulc |>
-  select(1, 2, 17:29) |>
-  pivot_longer(cols = 3:15, names_to = "land_type", values_to = "percent_area")
+lulc_narrow <- lulc |>
+  select(1, 2, 17:29) 
+glimpse(lulc_narrow)
+glimpse(lulc)
+
+lulc_combined <- lulc_narrow |>
+  mutate(p_Developed = p_Developed_open + p_Developed_low_intensity + p_Developed_med_intensity) |>
+  mutate(p_water = p_Open_water + p_Woody_wetlands + p_Emergent_herb_wetlands) |>
+  mutate(p_forest = p_Deciduous + p_Evergreen + p_Mixed_forest) |>
+  mutate(p_grassy = p_Grassland_herbaceous + p_Pasture_hay + p_Shrub_scrub) |>
+  relocate(p_Developed, p_water, p_forest, p_grassy, .after = area_ha) |>
+  mutate(treatment = if_else(DEPLOYMENT_NUM == "AM0067" | DEPLOYMENT_NUM == "AM0066" | DEPLOYMENT_NUM == "AM0086" | DEPLOYMENT_NUM == "AM0089" | DEPLOYMENT_NUM == "AM0075" | DEPLOYMENT_NUM == "AM0073" | DEPLOYMENT_NUM == "AM0074" | DEPLOYMENT_NUM == "AM0090" | DEPLOYMENT_NUM == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+  
 ```
+
+```{r}
+lulc_combined_7.7 <- lulc_combined |>
+  filter(area_ha == "7.7")
+
+lulc_combined_17.6 <- lulc_combined |>
+  filter(area_ha == "17.6")
+
+Div_Ind_join <- Div_Indices_high |>
+  select(c("deployment_num", "SR"))
+
+lulc_joined_7.7 <- left_join(Div_Ind_join, lulc_combined_7.7, by = join_by(deployment_num == DEPLOYMENT_NUM))
+
+lulc_joined_17.6 <- left_join(Div_Ind_join, lulc_combined_17.6, by = join_by(deployment_num == DEPLOYMENT_NUM))
+
+
+## explore variables to see what predictors to include
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_water)) +
+  geom_boxplot()
+## a bit more in beaver but not much
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_Developed)) +
+  geom_boxplot()
+## more in control
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_forest)) +
+  geom_boxplot()
+## about the same means
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_grassy)) +
+  geom_boxplot()
+## more in beaver
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_Woody_wetlands)) +
+  geom_boxplot()
+## p_woody_wetlands about same
+## p_emergent_wetlands more in beaver none in control
+```
+Add in the active vs not active site data
+```{r}
+beaver_active_df <- tibble(deployment_num = c("AM0063", "AM0064", "AM0081", "AM0083", "AM0087", "AM0094", "AM0095", "AM0096", "AM0067", "AM0066", "AM0086", "AM0089", "AM0075", "AM0073", "AM0074", "AM0090"), 
+       active_yn = c("hist", "hist", "yes", "yes", "yes", "yes", "yes", "hist", "no", "no", "no", "no", "no", "no", "no", "no"))
+
+## paused here because not sure how to distinguish past presence with 
+lulc_joined_7.7 <- left_join(lulc_joined_7.7, beaver_active_df, by = join_by(deployment_num)) |>
+  relocate(active_yn)
+
+lulc_joined_17.6 <-left_join(lulc_joined_17.6, beaver_active_df, by = join_by(deployment_num)) |>
+  relocate(active_yn)
+```
+
+
+
+Mult regression model 1 --
+beaver predictors 
+* treatment
+* active
+* p_water
+* p_grassy
+
+human predictors
+* p_developed
+
+```{r}
+beaver_model <- lm(data = lulc_joined_7.7, SR ~ treatment + p_water + p_grassy + active_yn)
+summary(beaver_model)
+
+human_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed)
+summary(human_model)
+
+
+## full model
+full_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed + treatment + p_water)
+summary(full_model)
+```
+
+
+
+
+
+```{r}
+pivot_longer(cols = 3:15, names_to = "land_type", values_to = "percent_area")
+```
+
+
 
 Join to Div_Indices dataframe so that can be used in a model with div indices as response
 ```{r}
