@@ -24,7 +24,13 @@ library(ggvegan)
 library(ggpubr)
 library(ggrepel)
 
-
+theme_teach<-function(){
+  theme(
+  #modify text, axis
+  axis.text = element_text(color = "black", size = 12),
+  axis.title = element_text(color = "black", size = 16)
+  )
+}
 ```
 
 Read in data (after running through the file `Merging_output.qmd`)
@@ -184,12 +190,14 @@ ggplot()+
 
 That plot has a lot of information in one plot - let's see if we can pull information out into two separate plots for easier interpretation. Regard the following code which creates a plot called p1 which puts each site on a plot, colored by forest, and numbered by plot number.
 
+### Final plots
+
 ```{r}
 p1<-ggplot()+
   geom_point(
     data = subset(ForPlotting, score =="sites"),
     mapping = aes(x = nmds1, y = nmds2, color = PlotInfo$treatment),
-              alpha = 0.8)+
+              alpha = 0.8, size = 4.5)+
   geom_text_repel(
     data = subset(ForPlotting, score =="sites"), 
     mapping = aes(x = nmds1, y = nmds2,label = label))+
@@ -220,7 +228,9 @@ p1<-ggplot()+
     panel.grid.minor = element_blank(),
     panel.background = element_blank(),
     axis.line = element_line(color = "black"),
-    legend.position = "right") +
+    legend.position = "right",
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 18)) +
   scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
   labs(color = "Treatment")
 p1
@@ -242,9 +252,12 @@ p2<-ggplot()+
         type = "closed"),
         color = "darkgray",
         size = 0.8)+
-  geom_text(
-    data = subset(ForPlotting, score == "species"),
-    mapping = aes(label = label, x = nmds1*1.1, y=nmds2*1.1))+
+#  geom_text(
+#    data = subset(ForPlotting, score == "species"),
+ #   mapping = aes(label = label, x = nmds1*1.1, y=nmds2*1.1))+
+  geom_text_repel(
+    data = subset(ForPlotting, score =="species"), 
+    mapping = aes(x = nmds1, y = nmds2,label = label))+
   geom_abline(
     intercept = 0, 
     slope = 0, 

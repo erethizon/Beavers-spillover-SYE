@@ -14,6 +14,7 @@ rm(list=ls())
 library(here)
 library(tidyverse)
 library(vegan)
+library(pander)
 
 theme_teach<-function(){
   theme(
@@ -78,6 +79,31 @@ highprob_results_deploy <- results_deploy_final |>
 
 ```
 
+## mean sd for table work
+
+This is still a work in progress:
+```{r}
+highprob_results_deploy |>
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(num_detections_day = n()) |>
+  arrange(species, deployment_num) |>
+  view()
+  ungroup() |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(mean_detections_day = mean(num_detections_day, na.rm = T),  
+            sd_detections_day = sd(num_detections_day, na.rm = T)) |>
+  ungroup() |>
+  group_by(treatment, species) |>
+  summarise(mean_detections_day_site = mean(mean_detections_day, na.rm = T),
+            sd_detections_day_site = sd(mean_detections_day, na.rm = T)) |>
+  pivot_wider(names_from = treatment,
+              values_from = mean_detections_day_site)
+  ## note that the number of rows is different than expected
+```
+
+
+
+
 Check the range of recording days again with the high prob data:
 ```{r}
 ## range of recording days:
@@ -103,12 +129,12 @@ highprob_results_deploy <- highprob_results_deploy |>
 
 detections_perdeploy_perspp_highp <- highprob_results_deploy |>
   group_by(deployment_num, species, recording_days, treatment) |>
-  summarise(num_detections = n())
+  summarise(num_detections = n()) ## this is the number of detections for each species for each deployment
   
 ## get the average number of detections per 10 days
 scaled_detections_highp <- detections_perdeploy_perspp_highp |>
   mutate(scaled_num_detections = (num_detections / recording_days) * 10)
-scaled_detections_highp
+scaled_detections_highp ## the average number of detections per 10 days for each species at each deployment/site
 
 
 ```
@@ -118,11 +144,17 @@ avg_detections_spp_table_high <- scaled_detections_highp |>
   relocate(treatment) |>
   select(c("treatment", "deployment_num", "species", "scaled_num_detections")) |>
   group_by(treatment, species) |>
-  summarise(mean_detections_10days = mean(scaled_num_detections))
+  summarise(mean_detections_10days = mean(scaled_num_detections, na.rm = T),
+            sd_detections_10days = sd(scaled_num_detections, na.rm = T)) ## average and standard deviations detections per 10 days for each species across all deployments of the treatment
 
 avg_detections_spp_table_wide_high <- avg_detections_spp_table_high |>
   pivot_wider(names_from = treatment, 
               values_from = mean_detections_10days)
+
+## pivot the standard devs so i can grab for table (will need to figure out pivot for both later!!)
+avg_detections_spp_table_high |>
+  pivot_wider(names_from = treatment, 
+              values_from = sd_detections_10days)
  
 avg_detections_spp_table_wide_high[is.na(avg_detections_spp_table_wide_high)] <- 0
 
@@ -460,7 +492,9 @@ beaver_active_df <- tibble(deployment_num = c("AM0063", "AM0064", "AM0081", "AM0
        active_yn = c("hist", "hist", "yes", "yes", "yes", "yes", "yes", "hist", "no", "no", "no", "no", "no", "no", "no", "no"))
 
 ## paused here because not sure how to distinguish past presence with 
-lulc_joined_7.7 <- left_join(lulc_joined_7.7, beaver_active_df, by = join_by(deployment_num)) |>
+lulc_joined_7.7 <- left_join(lulc_joined_7.7, beaver_active_df, by = join_by(deployment_num))
+
+lulc_joined_7.7 <- lulc_joined_7.7 |>
   relocate(active_yn)
 
 lulc_joined_17.6 <-left_join(lulc_joined_17.6, beaver_active_df, by = join_by(deployment_num)) |>
@@ -468,7 +502,7 @@ lulc_joined_17.6 <-left_join(lulc_joined_17.6, beaver_active_df, by = join_by(de
 ```
 
 
-
+### multiple regression
 Mult regression model 1 --
 beaver predictors 
 * treatment
@@ -480,10 +514,10 @@ human predictors
 * p_developed
 
 ```{r}
-beaver_model <- lm(data = lulc_joined_7.7, SR ~ treatment + p_water + p_grassy + active_yn)
+beaver_model <- lm(data = lulc_joined_7.7, SR ~ treatment + p_water + p_grassy) # activy_yn
 summary(beaver_model)
 
-human_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed)
+human_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed + treatment)
 summary(human_model)
 
 
