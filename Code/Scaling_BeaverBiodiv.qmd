@@ -3,9 +3,10 @@ title: "Beaver Biodiv - Scaling"
 author: Liz Anderson
 format: html
 ---
+
 Beaver Spillover Biodiversity Project
 
-Document for scaling the detections by day
+# Document for scaling the detections by day
 
 ## Set up
 ```{r}
@@ -59,15 +60,70 @@ scaling1 <- results_wild |>
   group_by(treatment) |>
   mutate(first_day = min(date),
             last_day = max(date),
-            total_day = last_day - first_day)
-## this is using the total days for each treatment, but should it instead be the total days when the species was detected?
-
-scaling1 |>
+            total_day = last_day - first_day) |>
   mutate(total_day = as.numeric(total_day)) |>
   group_by(treatment, species, total_day) |>
   summarise(total_detections = sum(num_detections)) |>
   summarise(average_detections_day = total_detections/total_day,
             sd_detections_day = sd(average_detections_day))
+
+## this is using the total days for each treatment, but should it instead be the total days when the species was detected?
+```
+
+
+```{r}
+## try with total days that the species was detected scaling instead -- I don't think this makes as much sense but does give standard deviation values
+
+tentative_av_detections_day <- results_wild |> 
+  group_by(treatment, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment, species) |>
+  summarise(mean_detections = mean(num_detections),
+            sd_detections = sd(num_detections)) |>
+  arrange(desc(mean_detections))
+  
+
+tent_av_detections_day <- ggplot(data = tentative_av_detections_day, aes(x = fct_reorder(species, mean_detections), y = mean_detections)) +
+  geom_point(size = 3, aes(color = treatment)) +
+  geom_errorbar(aes(ymin = mean_detections - sd_detections, ymax = mean_detections + sd_detections, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean detections per day",
+       x = "Species") +
+  coord_flip() +
+  facet_wrap(~treatment)
+
+ggsave(here("Output", "mean_detections_day.jpg"), plot = tent_av_detections_day, width = 8, height = 7)
+```
+#### Comparing the methods
+```{r}
+tentative_av_detections_day |>
+  arrange(treatment, species)
+
+## compared to
+
+scaling1 |>
+  arrange(treatment, species)
+
+## takeaway -- tentative_av_detections_day is not great... the numbers in scaling1 seem more accurate, but the issue is it didn't give a standard deviation.
+  
+```
+
+Plot scaling1
+```{r}
+scaling1_plot <- ggplot(data = scaling1, aes(x = fct_reorder(species, average_detections_day), y = average_detections_day)) +
+  geom_point(size = 3, aes(color = treatment)) +
+#  geom_errorbar(aes(ymin = mean_detections - sd_detections, ymax = mean_detections + sd_detections, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean detections per day",
+       x = "Species") +
+  coord_flip() +
+  facet_wrap(~treatment)
+
+ggsave(here("Output", "scaling1_plot.jpg"), plot = scaling1_plot, width = 8, height = 7)
 ```
 
 
@@ -109,7 +165,7 @@ mean_spp_day <- bind_rows(mean_spp_day_beaver, mean_spp_day_control)
 
 
 ```{r}
-ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_day)) +
+plot_av_spp_day <- ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_day)) +
   geom_point(size = 3, aes(color = treatment)) +
   geom_errorbar(aes(ymin = mean_spp_day - sd_spp_day, ymax = mean_spp_day + sd_spp_day, color = treatment), width = 0.2) +
   theme_bw() +
@@ -117,6 +173,8 @@ ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_day)) +
   scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
   labs(y = "Mean species detected per day",
        x = "Treatment")
+
+ggsave(here("Output", "mean_numspp_perday.jpg"), plot = plot_av_spp_day, width = 7, height = 5)
 ```
 
 

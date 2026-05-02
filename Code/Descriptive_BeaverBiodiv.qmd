@@ -1,5 +1,5 @@
 ---
-title: "Organized - Beaver Biodiv Analysis - Descriptive"
+title: "Beaver Biodiv Analysis - Descriptive"
 author: Liz Anderson
 format: html
 ---
