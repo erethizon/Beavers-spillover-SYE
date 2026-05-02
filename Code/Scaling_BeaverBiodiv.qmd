@@ -1,0 +1,67 @@
+---
+title: "Beaver Biodiv - Scaling"
+author: Liz Anderson
+format: html
+---
+Beaver Spillover Biodiversity Project
+
+Document for scaling the detections by day
+
+## Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+```
+
+```{r}
+## set up the data frames
+
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+```
+
+## Scaling!
+Goal - the average number of detections per day for each species at each treatment
+
+Will end up with 2 numbers for each species - means that can also have standard deviations
+```{r}
+## this is without anthropogenic sounds
+
+scaling1 <- results_wild |> 
+  group_by(treatment, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment) |>
+  mutate(first_day = min(date),
+            last_day = max(date),
+            total_day = last_day - first_day)
+## this is using the total days for each treatment, but should it instead be the total days when the species was detected?
+
+scaling1 |>
+  mutate(total_day = as.numeric(total_day)) |>
+  group_by(treatment, species, total_day) |>
+  summarise(total_detections = sum(num_detections)) |>
+  summarise(average_detections_day = total_detections/total_day,
+            sd_detections_day = sd(average_detections_day))
+```
+
+
+
+
+
+
+
+
+
+
+
+
