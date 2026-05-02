@@ -31,9 +31,25 @@ highprob_results_wild <- results_wild |>
 ```
 
 ## Scaling!
+### Average number of detections per day for each species
+
 Goal - the average number of detections per day for each species at each treatment
 
 Will end up with 2 numbers for each species - means that can also have standard deviations
+
+```{r}
+mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(date, species) |>
+  summarise(n_detections = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_detections = replace_na(n_detections, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "beaver") |>
+  relocate(treatment)
+```
+
 ```{r}
 ## this is without anthropogenic sounds
 
@@ -55,8 +71,53 @@ scaling1 |>
 ```
 
 
+### Average number of species per day per treatment
+
+```{r}
+mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(date, species) |>
+  summarise() |>
+  group_by(date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "beaver") |>
+  relocate(treatment)
+
+## Control
+mean_spp_day_control <- results_wild |>
+  filter(treatment == "control") |>
+  group_by(date, species) |>
+  summarise() |>
+  group_by(date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "control") |>
+  relocate(treatment)
+
+## join the two dataframes/treatments
+
+mean_spp_day <- bind_rows(mean_spp_day_beaver, mean_spp_day_control)
+
+```
 
 
+```{r}
+ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_day)) +
+  geom_point(size = 3, aes(color = treatment)) +
+  geom_errorbar(aes(ymin = mean_spp_day - sd_spp_day, ymax = mean_spp_day + sd_spp_day, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean species detected per day",
+       x = "Treatment")
+```
 
 
 
