@@ -1,0 +1,177 @@
+---
+title: "Multiple regression - beaver biodiv"
+author: Liz Anderson
+format: html
+---
+
+Copied over work from previous qmd (`high_prob_beaver_biodiv.qmd`)
+
+
+
+
+
+## Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+```
+
+```{r}
+## set up the data frames
+
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+```
+
+
+To prep data for multiple regression need to:
+
+* scale the data?
+* pivot
+* Get species richness for each site (the response variable)
+* join that with landcover data...
+
+
+
+## Landcover data
+
+```{r}
+lulc <- read.csv(here("Data", "LULC_spillover_diversity.csv"))
+glimpse(lulc)
+```
+
+
+To do:
+* Convert to long
+* filter to just the percentages
+
+```{r}
+lulc_narrow <- lulc |>
+  select(1, 2, 17:29) 
+glimpse(lulc_narrow)
+glimpse(lulc)
+
+lulc_combined <- lulc_narrow |>
+  mutate(p_Developed = p_Developed_open + p_Developed_low_intensity + p_Developed_med_intensity) |>
+  mutate(p_water = p_Open_water + p_Woody_wetlands + p_Emergent_herb_wetlands) |>
+  mutate(p_forest = p_Deciduous + p_Evergreen + p_Mixed_forest) |>
+  mutate(p_grassy = p_Grassland_herbaceous + p_Pasture_hay + p_Shrub_scrub) |>
+  relocate(p_Developed, p_water, p_forest, p_grassy, .after = area_ha) |>
+  mutate(treatment = if_else(DEPLOYMENT_NUM == "AM0067" | DEPLOYMENT_NUM == "AM0066" | DEPLOYMENT_NUM == "AM0086" | DEPLOYMENT_NUM == "AM0089" | DEPLOYMENT_NUM == "AM0075" | DEPLOYMENT_NUM == "AM0073" | DEPLOYMENT_NUM == "AM0074" | DEPLOYMENT_NUM == "AM0090" | DEPLOYMENT_NUM == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+  
+```
+
+
+```{r}
+lulc_combined_7.7 <- lulc_combined |>
+  filter(area_ha == "7.7")
+
+lulc_combined_17.6 <- lulc_combined |>
+  filter(area_ha == "17.6")
+
+Div_Ind_join <- Div_Indices_high |>
+  select(c("deployment_num", "SR"))
+
+lulc_joined_7.7 <- left_join(Div_Ind_join, lulc_combined_7.7, by = join_by(deployment_num == DEPLOYMENT_NUM))
+
+lulc_joined_17.6 <- left_join(Div_Ind_join, lulc_combined_17.6, by = join_by(deployment_num == DEPLOYMENT_NUM))
+
+
+## explore variables to see what predictors to include
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_water)) +
+  geom_boxplot()
+## a bit more in beaver but not much
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_Developed)) +
+  geom_boxplot()
+## more in control
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_forest)) +
+  geom_boxplot()
+## about the same means
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_grassy)) +
+  geom_boxplot()
+## more in beaver
+
+ggplot(data = lulc_joined_7.7, aes(x = treatment, y = p_Woody_wetlands)) +
+  geom_boxplot()
+## p_woody_wetlands about same
+## p_emergent_wetlands more in beaver none in control
+```
+
+
+Add in the active vs not active site data
+```{r}
+beaver_active_df <- tibble(deployment_num = c("AM0063", "AM0064", "AM0081", "AM0083", "AM0087", "AM0094", "AM0095", "AM0096", "AM0067", "AM0066", "AM0086", "AM0089", "AM0075", "AM0073", "AM0074", "AM0090"), 
+       active_yn = c("hist", "hist", "yes", "yes", "yes", "yes", "yes", "hist", "no", "no", "no", "no", "no", "no", "no", "no"))
+
+## paused here because not sure how to distinguish past presence with 
+lulc_joined_7.7 <- left_join(lulc_joined_7.7, beaver_active_df, by = join_by(deployment_num))
+
+lulc_joined_7.7 <- lulc_joined_7.7 |>
+  relocate(active_yn)
+
+lulc_joined_17.6 <-left_join(lulc_joined_17.6, beaver_active_df, by = join_by(deployment_num)) |>
+  relocate(active_yn)
+```
+
+
+### multiple regression
+Mult regression model 1 --
+beaver predictors 
+* treatment
+* active
+* p_water
+* p_grassy
+
+human predictors
+* p_developed
+
+```{r}
+beaver_model <- lm(data = lulc_joined_7.7, SR ~ treatment + p_water + p_grassy) # activy_yn
+summary(beaver_model)
+
+human_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed + treatment)
+summary(human_model)
+
+
+## full model
+full_model <- lm(data = lulc_joined_7.7, SR ~ p_Developed + treatment + p_water)
+summary(full_model)
+```
+
+```{r}
+pivot_longer(cols = 3:15, names_to = "land_type", values_to = "percent_area")
+```
+
+
+
+Join to Div_Indices dataframe so that can be used in a model with div indices as response
+```{r}
+Div_Indices_high_joined <- left_join(Div_Indices_high, lulc_long, by = join_by(deployment_num == DEPLOYMENT_NUM))
+Div_Indices_high
+```
+
+mutate for treatment
+pivot 
+
+
+
+
+
+
