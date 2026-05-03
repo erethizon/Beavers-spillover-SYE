@@ -36,24 +36,29 @@ highprob_results_wild <- results_wild |>
 
 Goal - the average number of detections per day for each species at each treatment
 
+Using the dataframe that is just the wild species (removed engine and dog)
+
 Will end up with 2 numbers for each species - means that can also have standard deviations
 
 ```{r}
+#### this code is a work in progress
+
 mean_spp_day_beaver <- results_wild |>
   filter(treatment == "beaver") |>
   group_by(date, species) |>
   summarise(n_detections = n()) |>
-  complete(date = seq.Date(min(date), max(date), by = "day")) |>
-  mutate(n_detections = replace_na(n_detections, 0)) |>
-  summarise(mean_spp_day = mean(n_spp),
-            sd_spp_day = sd(n_spp),
+#  complete(date = seq.Date(min(date), max(date), by = "day")) |> ## this line doesn't work because there is more than 1 row for each date
+#  mutate(n_detections = replace_na(n_detections, 0)) |>
+  group_by(species) |>
+  summarise(mean_detections_spp_day = mean(n_detections),
+            sd_detections_spp_day = sd(n_detections),
             treatment = "beaver") |>
   relocate(treatment)
+
+## I think this is the mean based on the number of days when that species was actually detected. It doesn't include the days when that species was not detected, which is important to have for the average. 
 ```
 
 ```{r}
-## this is without anthropogenic sounds
-
 scaling1 <- results_wild |> 
   group_by(treatment, date, species) |>
   summarise(num_detections = n()) |>
@@ -67,11 +72,14 @@ scaling1 <- results_wild |>
   summarise(average_detections_day = total_detections/total_day,
             sd_detections_day = sd(average_detections_day))
 
-## this is using the total days for each treatment, but should it instead be the total days when the species was detected?
+## this is using the total days for each treatment, which I think makes sense. However, it doesn't give a standard deviation. 
+
 ```
 
 
 ```{r}
+## this is similar to above where it wasn't quite working
+
 ## try with total days that the species was detected scaling instead -- I don't think this makes as much sense but does give standard deviation values
 
 tentative_av_detections_day <- results_wild |> 
@@ -94,7 +102,7 @@ tent_av_detections_day <- ggplot(data = tentative_av_detections_day, aes(x = fct
   coord_flip() +
   facet_wrap(~treatment)
 
-ggsave(here("Output", "mean_detections_day.jpg"), plot = tent_av_detections_day, width = 8, height = 7)
+# ggsave(here("Output", "mean_detections_day.jpg"), plot = tent_av_detections_day, width = 8, height = 7)
 ```
 #### Comparing the methods
 ```{r}
@@ -123,13 +131,15 @@ scaling1_plot <- ggplot(data = scaling1, aes(x = fct_reorder(species, average_de
   coord_flip() +
   facet_wrap(~treatment)
 
-ggsave(here("Output", "scaling1_plot.jpg"), plot = scaling1_plot, width = 8, height = 7)
+# ggsave(here("Output", "scaling1_plot.jpg"), plot = scaling1_plot, width = 8, height = 7)
 ```
 
 
 ### Average number of species per day per treatment
 
 ```{r}
+## using the code with function complete() worked well here. I filtered to each treatment to just have one line for each day because I'm counting the number of species each day. Then join the two treatment data frames.
+
 mean_spp_day_beaver <- results_wild |>
   filter(treatment == "beaver") |>
   group_by(date, species) |>
@@ -174,7 +184,56 @@ plot_av_spp_day <- ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_d
   labs(y = "Mean species detected per day",
        x = "Treatment")
 
-ggsave(here("Output", "mean_numspp_perday.jpg"), plot = plot_av_spp_day, width = 7, height = 5)
+# ggsave(here("Output", "mean_numspp_perday.jpg"), plot = plot_av_spp_day, width = 7, height = 5)
+```
+
+#### stat test compare
+To be able to compare these with a Wilcoxon test I think it needs to have multiple points, so I should get the average species per day at each deployment site.
+
+```{r}
+
+site_mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(deployment_num, date, species) |>
+  summarise() |>
+  group_by(deployment_num, date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |> ## I'm surprised this worked because I thought with multiple rows per date it wouldn't
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "beaver") |>
+  relocate(treatment)
+
+## Control
+site_mean_spp_day_control <- results_wild |>
+  filter(treatment == "control") |>
+  group_by(deployment_num, date, species) |>
+  summarise() |>
+  group_by(deployment_num, date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "control") |>
+  relocate(treatment)
+
+## join the two dataframes/treatments
+
+mean_spp_day_site <- bind_rows(site_mean_spp_day_beaver, site_mean_spp_day_control)
+mean_spp_day_site
+
+mean_spp_day_site |>
+  group_by(treatment) |>
+  summarise(mean_all = mean(mean_spp_day)) ## these values are not the same as the mean I got earlier when didn't group by treatment first... that probably makes a difference for the t-test?
+```
+Now run a Wilcoxon test to see if distributions for beaver and control site mean number of species detected per day is different
+
+```{r}
+wilcox.test(mean_spp_day ~ treatment, data = mean_spp_day_site) ## not significant
+
+t.test(mean_spp_day ~ treatment, data = mean_spp_day_site) ## because this is continuous data, is a t.test appropriate? it's also not significant
 ```
 
 

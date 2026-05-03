@@ -68,7 +68,20 @@ Div_Indices
 
 Now that I have the species richness I can run the Wilcoxon test
 ```{r}
-wilcox.test(SR ~ treatment, data = Div_Indices)
+wilcox.test(SR ~ treatment, data = Div_Indices) ## just significant enough -- p-value 0.06429
+```
+Plot
+```{r}
+SR_plot_flip <- ggplot(data = Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+  
+ggsave(here("Output", "SR_Plot_flip.jpg"), plot = SR_plot_flip, width = 11.25, height = 4.5, units = "in")
 ```
 
 
@@ -105,9 +118,43 @@ Highprob_Div_Indices
 ```
 
 ```{r}
-wilcox.test(SR ~ treatment, data = Highprob_Div_Indices)
+wilcox.test(SR ~ treatment, data = Highprob_Div_Indices) ## not significant - p value 0.1122
+```
+Plot
+```{r}
+highprob_SR_plot_flip <- ggplot(data = Highprob_Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+  
+ggsave(here("Output", "highprob_SR_Plot_flip.jpg"), plot = highprob_SR_plot_flip, width = 11.25, height = 4.5, units = "in")
 ```
 
+## Species Richness tables
 
+Get a table to put in paper with the species richness of each site with a column for beaver and a column for control (and maybe also separated by confidence score? - although doesn't change much)
+
+```{r}
+Div_Indices
+
+Div_Indices |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            sd_SR = sd(SR))
+
+write_csv(Div_Indices, here("Output", "SR_all.csv"))
+
+
+
+
+Highprob_Div_Indices |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            sd_SR = sd(SR))
+```
 
 
