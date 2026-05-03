@@ -41,6 +41,29 @@ Using the dataframe that is just the wild species (removed engine and dog)
 Will end up with 2 numbers for each species - means that can also have standard deviations
 
 ```{r}
+## this gives the average detections of a species at a site per day based off how long each detector was out:
+
+scale_spp <- results_wild |>
+  group_by(deployment_num) |>
+  mutate(date = ymd(date)) |>
+  mutate(first_rec = min(date),
+            last_rec = max(date)) |>
+  mutate(recording_days = last_rec - first_rec) |>
+  relocate(first_rec, last_rec, recording_days) |>
+  mutate(recording_days = as.numeric(recording_days))
+
+scale_spp |>
+  group_by(deployment_num, species, recording_days) |>
+  summarise(num_detections = n()) |> # check that there is variation in recording days variable
+  group_by(deployment_num, species) |>
+  summarise(av_spp_site = num_detections / recording_days)
+## standard deviation still doesn't work
+```
+
+
+Next is other code chunks trying to get a mean and standard deviation for the average number of detections per day for each species at each treatment
+
+```{r}
 #### this code is a work in progress
 
 mean_spp_day_beaver <- results_wild |>
