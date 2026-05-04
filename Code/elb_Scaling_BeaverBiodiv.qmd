@@ -1,0 +1,618 @@
+---
+title: "Beaver Biodiv - Scaling"
+author: Liz Anderson
+format: html
+---
+
+Beaver Spillover Biodiversity Project
+
+# Document for scaling the detections by day
+
+## Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+```
+
+```{r}
+## set up the data frames
+
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+```
+
+## Scaling!
+### Average number of detections per day for each species
+
+Goal - the average number of detections per day for each species at each treatment
+
+Using the dataframe that is just the wild species (removed engine and dog)
+
+Will end up with 2 numbers for each species - means that can also have standard deviations
+
+## Erika's attempt here before looking at your code to see if we are on the same page -- messing around
+Using the wild species 
+Group by treatment, deployment num
+```{r}
+wild_summary <- results_wild |>
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(
+    num_detections = n()
+  )
+```
+Now use wild_summary to get mean_detections_per_day
+```{r}
+wild_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    sd_detections_per_day = sd(num_detections, na.rm = T)
+    ) |>
+      View()
+  
+```
+Now take a look at a couple of detectors for which I got nothing for the sd
+
+```{r}
+results_wild |> 
+  filter(deployment_num == "AM0081") |>
+  View()
+
+```
+AM0081 has a single observation of a brant, so it makes sense there is no sd. But why do some show mean of 1.0, sd of 0.0?
+Let's check:AM0096, snow goose
+
+```{r}
+results_wild |>
+  filter(deployment_num == "AM0096") |>
+  View()
+```
+Snow goose appeared once on two separate days. So it makes sense that the average was 1.0 (1+1 = 2 divided by 2 = 1) and that the sd is 0.0 since there were no days where there were more snow goose. For instance, if we had (0+1+2 = 3 and then divided by 3 days we would get a mean of 1, but the sd would be different from 0).
+
+So if SD = NA, there was only 1 instance of the species at that detector.
+If SD = 0, there was no variation in the number that occured on any given day.
+
+Next issue is to make sure that all means are being divided by the total number of days, and not just the number of days on which the species occurred (in other words, account for days where the number of detections of that species == 0).
+
+Let's use a subset of the data to check:
+
+```{r}
+test <- results_wild |>
+  filter(deployment_num %in% c("AM0081", "AM0096"))
+
+test_summary <- test |>
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(
+    num_detections = n()
+  )
+```
+How many days was AM0081 deployed?
+```{r}
+results_wild |>
+  filter(deployment_num == "AM0081") |>
+  summary()
+```
+Nov 2 through Nov 18. 16 days. Let's see if we can calculate it
+```{r}
+AM0081 <- results_wild |>
+  filter(deployment_num == "AM0081") 
+  
+AM0081 <- AM0081 |> arrange(date) 
+
+AM0081 <- AM0081 |>
+  rename(my_date = date)
+
+deployment_length <- interval(min(AM0081$my_date), max(AM0081$my_date)) /days(1)
+  
+```
+Ok, so now let's see if the means are correct
+```{r}
+test_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    check_mean = sum(num_detections, na.rm = T) /deployment_length,
+    sd_detections_per_day = sd(num_detections, na.rm = T)
+    ) |>
+      View()
+```
+Let's isolate to one species
+```{r}
+chickadeeAM0081 <- AM0081 |>
+  filter(species == "Black-capped Chickadee")
+
+chick_sum <- chickadeeAM0081 |>
+  group_by(treatment, deployment_num, my_date, species) |>
+  summarise(
+    num_detections = n()
+  )
+```
+Now get means
+```{r}
+chick_means <- chick_sum |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    check_mean = sum(num_detections, na.rm = T)/deployment_length
+  )
+```
+Ok - so this showed me that the mean calculation is not using the total number of deployment days. We have options. One is to "complete" the data set so that, for each species, there is a 0 for days on which it was not observed.
+
+A second, perhaps easier option,is to write our own "mean" calculation that uses the number of deployment days as the denominator in calculating the mean. I think this second approach is what Liz tried below.
+
+using `test` as the example (2 deployments), let's see what we can do here.
+
+```{r}
+deploy_days <- test |>
+  group_by(treatment, deployment_num) |>
+  mutate(deploy_length = max(date)- min(date))
+```
+Now summarise
+```{r}
+deploy_summary <- deploy_days |>
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(num_detections = n())
+
+```
+Now I need to join a df that has deployment_number and deployment_length 
+
+```{r}
+deployment_lengths <- deploy_days |>
+  group_by(treatment, deployment_num) |>
+  summarise(deployment_length = max(date)- min(date) )
+```
+Now join to deployment_summary
+
+```{r}
+deploy_summary <- left_join(deploy_summary, deployment_lengths)
+```
+Now try to get the means
+```{r}
+deploy_means <- deploy_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    sum_detections = sum(num_detections, na.rm = T)
+  )
+```
+
+Now join to deployment_summary
+
+```{r}
+deploy_means <- left_join(deploy_means, deployment_lengths)
+```
+Now mutate to get means
+```{r}
+deploy_means <- deploy_means |>
+  mutate(new_mean_per_day = sum_detections/as.numeric(deployment_length))
+```
+
+This works, but this approach does not let us calculate the sd. 
+
+I think we need option 1. Let's try it:
+
+```{r}
+test_filled <- test |>
+  group_by(treatment, deployment_num, species) |>
+  complete(date = seq(min(date), max(date), by = "day")) 
+  
+```
+I think it worked. Now group by and summarise
+
+```{r}
+test_filled_summary <- test_filled |>
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(
+    num_detections = n()
+  )
+```
+Ok. Not working. If a species occurs, for example, between 11/02 and 11/07, but didn't show up on 11/05, when I use "complete" for that species, it only fills in between 11/02 and 11/07, even if the detector was deployed until 11/18. Need a different approach.
+
+Can we get the full date range? Let's try, but we need different date ranges for each deployment
+
+Use a loop?
+
+```{r}
+loop_length <- length(unique(test$deployment_num))
+deployments <- unique(test$deployment_num)
+
+for(i in 1:loop_length){
+  df <- test |> 
+    filter(deployment_num == deployments[i]) |>
+    mutate(detection = 1)
+  full_dates <- seq(min(df$date), max(df$date), by = "day")
+  #now complete the dates
+  df_filled <- df |>
+    group_by(treatment, deployment_num, species) |> 
+    complete(date = full_dates)
+  #now fill in the nas in detection as 0
+  df_filled <- df_filled |>
+    mutate(detection = replace_na(detection, 0))
+  
+  #now save to master
+  if(i == 1){main_df <- df_filled} else {main_df <- rbind(main_df, df_filled)}
+  #I think it worked
+ 
+}
+
+
+```
+
+```{r}
+#now summarise and see if it keeps the correct number of observations
+main_df_summary <- main_df |>
+    group_by(treatment, deployment_num, date, species) |>
+    summarise(
+      num_rows = n(), 
+      num_detections = sum(detection, na.rm = T)
+    )
+```
+Now get mean and sd
+```{r}
+main_df_means <-
+  main_df_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    sd_detections_per_day = sd(num_detections, na.rm = T)
+  )
+```
+## Erika's fix for getting means and sds on num detections per day per species
+I think it is working!
+So, using the entire data set, to get mean and sd per species per detector per day:
+
+```{r}
+#run loop to complete rows and add 1s or 0s for detections
+loop_length <- length(unique(results_wild$deployment_num))
+deployments <- unique(results_wild$deployment_num)
+results_wild <- results_wild |> select(-`...1`)
+for(i in 1:loop_length){
+  df <- results_wild |> 
+    filter(deployment_num == deployments[i]) |>
+    mutate(detection = 1)
+  full_dates <- seq(min(df$date), max(df$date), by = "day")
+  #now complete the dates
+  df_filled <- df |>
+    group_by(treatment, deployment_num, species) |> 
+    complete(date = full_dates)
+  #now fill in the nas in detection as 0
+  df_filled <- df_filled |>
+    mutate(detection = replace_na(detection, 0))
+  
+  #now save to master
+  if(i == 1){results_wild_filled <- df_filled} else {results_wild_filled <- rbind(results_wild_filled, df_filled)}
+  #I think it worked
+ 
+}
+
+```
+Now get summary
+
+```{r}
+results_wild_summary <- results_wild_filled |>
+    group_by(treatment, deployment_num, date, species) |>
+    summarise(
+      num_rows = n(), 
+      num_detections = sum(detection, na.rm = T)
+    )
+```
+
+```{r}
+results_wild_mean_per_day <-
+  results_wild_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    sd_detections_per_day = sd(num_detections, na.rm = T)
+  )
+```
+now write this file to use for Jaccard, etc.
+```{r}
+write_csv(results_wild_mean_per_day, here("Data/results_wild_mean_per_day.csv"))
+```
+
+## How about mean and sd of number of species detected per day
+Using results_wild
+
+For this, we don't need to fill in 0s, because for each day, we just want to know the number of species detected. if there are any days for which there were 0 species detected, I guess we'd want to fill in those zeros, but I think it is unlikely to occur. Let's take a look:
+
+```{r}
+results_wild |>
+  ungroup() |>
+  group_by(treatment, deployment_num, date) |>
+  summarise(num_species = n_distinct(species)) |>
+  View()
+```
+Looks like there may be some dates for which no species were detected?? Let's check
+```{r}
+results_wild |>
+  filter(deployment_num == "AM0063") |>
+  View()
+```
+Indeed, it appears that there are some dates for which no species were detected, so I think we need to use results_wild_filled and see if that gives us better data.
+
+```{r}
+results_wild_num_species <- results_wild |>
+  ungroup() |>
+  group_by(treatment, deployment_num, date) |>
+  summarise(num_species = n_distinct(species)) 
+```
+Now we need to loop through results_wild_num_species and fill in zeroes for the days on which nothing was detected
+
+Let's try a loop
+```{r}
+#run loop to complete rows and add 1s or 0s for detections
+loop_length <- length(unique(results_wild_num_species$deployment_num))
+deployments <- unique(results_wild_num_species$deployment_num)
+
+for(i in 1:loop_length){
+  df <- results_wild_num_species |> 
+    filter(deployment_num == deployments[i]) 
+  full_dates <- seq(min(df$date), max(df$date), by = "day")
+  #now complete the dates
+  df_filled <- df |>
+    group_by(treatment, deployment_num) |> 
+    complete(date = full_dates)
+  #now fill in the nas in detection as 0
+  df_filled <- df_filled |>
+    mutate(num_species = replace_na(num_species, 0))
+  
+  #now save to master
+  if(i == 1){num_species_by_date <- df_filled} else {num_species_by_date <- rbind(num_species_by_date, df_filled)}
+  #I think it worked
+ 
+}
+
+```
+Now get means, sds
+```{r}
+num_sp_by_date_means <-
+  num_species_by_date |>
+  group_by(treatment, deployment_num) |>
+  summarise(
+    mean_num_species_per_day = mean(num_species, na.rm = T),
+    sd_num_sp_per_day = sd(num_species, na.rm = T)
+  )
+```
+
+
+
+## Back to Liz's code
+
+
+```{r}
+## this gives the average detections of a species at a site per day based off how long each detector was out:
+
+scale_spp <- results_wild |>
+  group_by(deployment_num) |>
+  mutate(date = ymd(date)) |>
+  mutate(first_rec = min(date),
+            last_rec = max(date)) |>
+  mutate(recording_days = last_rec - first_rec) |>
+  relocate(first_rec, last_rec, recording_days) |>
+  mutate(recording_days = as.numeric(recording_days))
+
+scale_spp |>
+  group_by(deployment_num, species, recording_days) |>
+  summarise(num_detections = n()) |> # check that there is variation in recording days variable
+  group_by(deployment_num, species) |>
+  summarise(av_spp_site = num_detections / recording_days)
+## standard deviation still doesn't work
+```
+
+
+Next is other code chunks trying to get a mean and standard deviation for the average number of detections per day for each species at each treatment
+
+```{r}
+#### this code is a work in progress
+
+mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(date, species) |>
+  summarise(n_detections = n()) |>
+#  complete(date = seq.Date(min(date), max(date), by = "day")) |> ## this line doesn't work because there is more than 1 row for each date
+#  mutate(n_detections = replace_na(n_detections, 0)) |>
+  group_by(species) |>
+  summarise(mean_detections_spp_day = mean(n_detections),
+            sd_detections_spp_day = sd(n_detections),
+            treatment = "beaver") |>
+  relocate(treatment)
+
+## I think this is the mean based on the number of days when that species was actually detected. It doesn't include the days when that species was not detected, which is important to have for the average. 
+```
+
+```{r}
+scaling1 <- results_wild |> 
+  group_by(treatment, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment) |>
+  mutate(first_day = min(date),
+            last_day = max(date),
+            total_day = last_day - first_day) |>
+  mutate(total_day = as.numeric(total_day)) |>
+  group_by(treatment, species, total_day) |>
+  summarise(total_detections = sum(num_detections)) |>
+  summarise(average_detections_day = total_detections/total_day,
+            sd_detections_day = sd(average_detections_day))
+
+## this is using the total days for each treatment, which I think makes sense. However, it doesn't give a standard deviation. 
+
+```
+
+
+```{r}
+## this is similar to above where it wasn't quite working
+
+## try with total days that the species was detected scaling instead -- I don't think this makes as much sense but does give standard deviation values
+
+tentative_av_detections_day <- results_wild |> 
+  group_by(treatment, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment, species) |>
+  summarise(mean_detections = mean(num_detections),
+            sd_detections = sd(num_detections)) |>
+  arrange(desc(mean_detections))
+  
+
+tent_av_detections_day <- ggplot(data = tentative_av_detections_day, aes(x = fct_reorder(species, mean_detections), y = mean_detections)) +
+  geom_point(size = 3, aes(color = treatment)) +
+  geom_errorbar(aes(ymin = mean_detections - sd_detections, ymax = mean_detections + sd_detections, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean detections per day",
+       x = "Species") +
+  coord_flip() +
+  facet_wrap(~treatment)
+
+# ggsave(here("Output", "mean_detections_day.jpg"), plot = tent_av_detections_day, width = 8, height = 7)
+```
+#### Comparing the methods
+```{r}
+tentative_av_detections_day |>
+  arrange(treatment, species)
+
+## compared to
+
+scaling1 |>
+  arrange(treatment, species)
+
+## takeaway -- tentative_av_detections_day is not great... the numbers in scaling1 seem more accurate, but the issue is it didn't give a standard deviation.
+  
+```
+
+Plot scaling1
+```{r}
+scaling1_plot <- ggplot(data = scaling1, aes(x = fct_reorder(species, average_detections_day), y = average_detections_day)) +
+  geom_point(size = 3, aes(color = treatment)) +
+#  geom_errorbar(aes(ymin = mean_detections - sd_detections, ymax = mean_detections + sd_detections, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean detections per day",
+       x = "Species") +
+  coord_flip() +
+  facet_wrap(~treatment)
+
+# ggsave(here("Output", "scaling1_plot.jpg"), plot = scaling1_plot, width = 8, height = 7)
+```
+
+
+### Average number of species per day per treatment
+
+```{r}
+## using the code with function complete() worked well here. I filtered to each treatment to just have one line for each day because I'm counting the number of species each day. Then join the two treatment data frames.
+
+mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(date, species) |>
+  summarise() |>
+  group_by(date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "beaver") |>
+  relocate(treatment)
+
+## Control
+mean_spp_day_control <- results_wild |>
+  filter(treatment == "control") |>
+  group_by(date, species) |>
+  summarise() |>
+  group_by(date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "control") |>
+  relocate(treatment)
+
+## join the two dataframes/treatments
+
+mean_spp_day <- bind_rows(mean_spp_day_beaver, mean_spp_day_control)
+
+```
+
+
+```{r}
+plot_av_spp_day <- ggplot(data = mean_spp_day, aes(x = treatment, y = mean_spp_day)) +
+  geom_point(size = 3, aes(color = treatment)) +
+  geom_errorbar(aes(ymin = mean_spp_day - sd_spp_day, ymax = mean_spp_day + sd_spp_day, color = treatment), width = 0.2) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  labs(y = "Mean species detected per day",
+       x = "Treatment")
+
+# ggsave(here("Output", "mean_numspp_perday.jpg"), plot = plot_av_spp_day, width = 7, height = 5)
+```
+
+#### stat test compare
+To be able to compare these with a Wilcoxon test I think it needs to have multiple points, so I should get the average species per day at each deployment site.
+
+```{r}
+
+site_mean_spp_day_beaver <- results_wild |>
+  filter(treatment == "beaver") |>
+  group_by(deployment_num, date, species) |>
+  summarise() |>
+  group_by(deployment_num, date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |> ## I'm surprised this worked because I thought with multiple rows per date it wouldn't
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "beaver") |>
+  relocate(treatment)
+
+## Control
+site_mean_spp_day_control <- results_wild |>
+  filter(treatment == "control") |>
+  group_by(deployment_num, date, species) |>
+  summarise() |>
+  group_by(deployment_num, date) |>
+  summarise(n_spp = n()) |>
+  complete(date = seq.Date(min(date), max(date), by = "day")) |>
+  mutate(n_spp = replace_na(n_spp, 0)) |>
+  summarise(mean_spp_day = mean(n_spp),
+            sd_spp_day = sd(n_spp),
+            treatment = "control") |>
+  relocate(treatment)
+
+## join the two dataframes/treatments
+
+mean_spp_day_site <- bind_rows(site_mean_spp_day_beaver, site_mean_spp_day_control)
+mean_spp_day_site
+
+mean_spp_day_site |>
+  group_by(treatment) |>
+  summarise(mean_all = mean(mean_spp_day)) ## these values are not the same as the mean I got earlier when didn't group by treatment first... that probably makes a difference for the t-test?
+```
+Now run a Wilcoxon test to see if distributions for beaver and control site mean number of species detected per day is different
+
+```{r}
+wilcox.test(mean_spp_day ~ treatment, data = mean_spp_day_site) ## not significant
+
+t.test(mean_spp_day ~ treatment, data = mean_spp_day_site) ## because this is continuous data, is a t.test appropriate? it's also not significant
+```
+
+
+
+
+
+
+
+
