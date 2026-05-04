@@ -1,0 +1,32 @@
+---
+title: "elb-note-for-liz"
+format: html
+editor: visual
+---
+
+## Notes for Liz
+
+Hi, Liz, 
+
+I know we'll talk in person about some of this, but here's what I've done:
+
+### 1. Mean detections per species per day, mean species richness per day
+In the file `elb_Scaling_BeaverBiodiv.qmd` I tried to figure out how to correctly (I think!) estimate both mean and sd of:
+- The number of detections per species per deployment per day
+- The mean species richness per deployment day
+
+I messed around a lot with the code: for mean detections per species per deployment per day, for the "final code" which includes a loop to step through and add "0" rows to each deployment so that when a species is not detected, it gets a 0 rather than not appearing in the dataset, see the heading `Erika's fix for getting means and sds on num detections per day per species`
+
+I used a similar looping method to fill in 0 rows for deployments to account for days on which no species were detected before calculating mean and sd species richness per day. That code starts at the heading `How about mean and sd of number of species detected per day`.
+
+You can read the other code in that file, some of which was yours, some is mine (I needed to prove to myself that the zero days were not and needed to be included and a few other "proof of concept" steps) but it isn't essential to "getting the job done"
+
+### 2. Jaccard index, etc.
+In the file `elb_jaccard_specnum.qmd` I wrote code that:
+- Uses a dataset called `results_wild_mean_per_day.csv` that is written in `elb_Scaling_BeaverBiodiv.qmd` (in case you need to generate it)
+- Uses two different wide datasets to check some Jaccard and species richness calculations. One dataset, jaccard_ra, includes the relative abundance of each species as part of the wide dataset (values are mean detections per day for each species). The other dataset, PresAb, is just a presence-absence dataset for which if the species is present at a detector, = 1 vs absent = 0.
+- Then use both datasets to compare Jaccard index (it is the same regardless of which dataset I used)
+- Use both datasets to compare species richness (it is the same)
+- Demonstrates, as expected, that the shannon (and it would be true for simpson as well) index values differ depending on which dataset is used.
+
+I'm going to push all these changes, and you have the option to just pull to main if you like, since I created new .qmd files and it shouldn't overwrite anything in your repo, or I can show you how to check out a pull request without merging into main.
