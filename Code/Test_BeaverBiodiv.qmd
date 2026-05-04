@@ -1,0 +1,160 @@
+---
+title: "Beaver Biodiv -- comparing treatments"
+author: Liz Anderson
+format: html
+---
+
+Document for running statistical tests to compare biodiversity between beaver and control sites.
+
+Previously did a t-test like this: `t.test(SR ~ treatment, data = Div_Indices_high)`
+
+But t-tests aren't supposed to be done with count data (which SR is)
+
+## Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+```
+
+```{r}
+## set up datasets
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+```
+
+Use this code: `wilcox.test(values ~ groups, data = df)` to run a non-paired Wilcoxon test - does not assume that the data is normally distributed
+
+First need the data in a wide format for vegan - and need it scaled with the deployment sites
+
+Using the dataset without anthropogenic noise
+
+```{r}
+scale_for_wide <- results_wild |> 
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment, deployment_num) |>
+  mutate(first_day = min(date),
+            last_day = max(date),
+            total_day = last_day - first_day) |>
+  mutate(total_day = as.numeric(total_day)) |>
+  group_by(treatment, deployment_num, species, total_day) |>
+  summarise(total_detections = sum(num_detections)) |>
+  summarise(average_detections_day = total_detections/total_day)
+
+scaled_day_wide <- scale_for_wide |>
+  pivot_wider(names_from = species, values_from = average_detections_day)
+
+scaled_day_wide[is.na(scaled_day_wide)] <- 0
+
+scaled_day_wide
+```
+
+```{r}
+## set up dataframe
+Div_Indices <- scaled_day_wide[,1:2]
+Div_Indices$SR <- specnumber(scaled_day_wide)
+Div_Indices
+```
+
+Now that I have the species richness I can run the Wilcoxon test
+```{r}
+wilcox.test(SR ~ treatment, data = Div_Indices) ## just significant enough -- p-value 0.06429
+```
+Plot
+```{r}
+SR_plot_flip <- ggplot(data = Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+  
+ggsave(here("Output", "SR_Plot_flip.jpg"), plot = SR_plot_flip, width = 11.25, height = 4.5, units = "in")
+```
+
+
+## Run it again for 0.8 confidence score
+
+highprob_results_wild
+
+```{r}
+highprob_scale_for_wide <- highprob_results_wild |> 
+  group_by(treatment, deployment_num, date, species) |>
+  summarise(num_detections = n()) |>
+  group_by(treatment, deployment_num) |>
+  mutate(first_day = min(date),
+            last_day = max(date),
+            total_day = last_day - first_day) |>
+  mutate(total_day = as.numeric(total_day)) |>
+  group_by(treatment, deployment_num, species, total_day) |>
+  summarise(total_detections = sum(num_detections)) |>
+  summarise(average_detections_day = total_detections/total_day)
+
+highprob_scaled_day_wide <- highprob_scale_for_wide |>
+  pivot_wider(names_from = species, values_from = average_detections_day)
+
+highprob_scaled_day_wide[is.na(highprob_scaled_day_wide)] <- 0
+
+highprob_scaled_day_wide
+```
+
+```{r}
+## set up dataframe
+Highprob_Div_Indices <- highprob_scaled_day_wide[,1:2]
+Highprob_Div_Indices$SR <- specnumber(highprob_scaled_day_wide)
+Highprob_Div_Indices
+```
+
+```{r}
+wilcox.test(SR ~ treatment, data = Highprob_Div_Indices) ## not significant - p value 0.1122
+```
+Plot
+```{r}
+highprob_SR_plot_flip <- ggplot(data = Highprob_Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+  geom_boxplot()+
+  geom_point() +
+  labs(x = "Treatment", y = "Species Richness") +
+  theme_bw() +
+  coord_flip() +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme(legend.position = "none")
+  
+ggsave(here("Output", "highprob_SR_Plot_flip.jpg"), plot = highprob_SR_plot_flip, width = 11.25, height = 4.5, units = "in")
+```
+
+## Species Richness tables
+
+Get a table to put in paper with the species richness of each site with a column for beaver and a column for control (and maybe also separated by confidence score? - although doesn't change much)
+
+```{r}
+Div_Indices
+
+Div_Indices |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            sd_SR = sd(SR))
+
+write_csv(Div_Indices, here("Output", "SR_all.csv"))
+
+
+
+
+Highprob_Div_Indices |>
+  group_by(treatment) |>
+  summarise(mean_SR = mean(SR),
+            sd_SR = sd(SR))
+```
+
+

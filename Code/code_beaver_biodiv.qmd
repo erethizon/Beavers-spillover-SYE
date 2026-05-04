@@ -428,7 +428,7 @@ species_by_treatment_df <- results_deploy_final |>
               values_from = num_detections)
 species_by_treatment_df
 
-## would be good to remake with scaled data...
+## would be good to remake with scaled data... see high prob qmd file
 
 ```
 
@@ -471,7 +471,6 @@ ggplot(data = spp_numrec_depl_control, aes(x = species, y = num_rec)) +
 
 ## Next steps:
 Species accumulation curve
-- pivoting wider...
 - assigning day numbers?
 - figure out specific table
 
@@ -579,6 +578,9 @@ good to talk about if the beaver sites are similar or different to each other
 
 
 ## Ordination work - following along with Ordination-in-class R project
+
+_Go see specific qmd for this now_
+
 ```{r}
 results_wide_scaled
 # results_scaled_vegan

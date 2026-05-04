@@ -1,0 +1,357 @@
+---
+title: "Beaver Biodiv Analysis - Descriptive"
+author: Liz Anderson
+format: html
+---
+
+# Descriptive stats with the full data set
+* How long each AM recorded for at each treatment
+* What species were detected at each treatment and how many times (counts)
+
+
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+
+theme_teach<-function(){
+  theme(
+  #modify text, axis
+  axis.text = element_text(color = "black", size = 12),
+  axis.title = element_text(color = "black", size = 16)
+  )
+}
+```
+
+```{r}
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+```
+
+## Basic descriptive stats
+
+### Number of AM days 
+
+#### All sites
+```{r}
+## count the number of days
+length(unique(results_deploy_final$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_final |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_final |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+
+```
+
+
+#### beaver sites
+```{r}
+results_deploy_beaver <- results_deploy_final |>
+  filter(treatment == "beaver")
+
+## count the number of days
+length(unique(results_deploy_beaver$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_beaver |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_beaver |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+```
+
+#### control sites
+```{r}
+results_deploy_control <- results_deploy_final |>
+  filter(treatment == "control")
+
+## count the number of days
+length(unique(results_deploy_control$date))
+
+## number of detections (3 second clips that detected something) on each day
+results_deploy_control |>
+  count(date)
+
+## total seconds of recording that detected something -- (sum the counts from num observations and multiply by 3)
+results_deploy_control |>
+  count(date) |>
+  summarise(total_times = sum(n)) |>
+  mutate(seconds_detecting = total_times * 3) |>
+  mutate(minutes_detecting = seconds_detecting / 60) |>
+  mutate(hours_detecting = minutes_detecting / 60)
+```
+
+Control sites had much fewer time detections and time detecting
+Only a 5 day difference in the number of days that detections were made on
+
+
+### plot detector date ranges
+
+```{r}
+glimpse(results_deploy_final)
+
+results_deploy_final$day_of_year <- yday(results_deploy_final$date)
+## make a column for day of the year (julien date)
+results_deploy_final
+```
+
+```{r}
+## want to facet this in a good order
+glimpse(results_deploy_final)
+results_deploy_final <- results_deploy_final |>
+  mutate(deployment_num = fct_relevel(deployment_num, c("AM0067", "AM0066", "AM0086", "AM0089", "AM0075", "AM0073", "AM0074", "AM0090")))
+
+plot_date_range <- ggplot(data = results_deploy_final, aes(x = date, fill = treatment)) +
+  geom_bar(color = "black", linewidth = 0.1) +
+  coord_flip() +
+  facet_grid(~deployment_num) +
+  theme_minimal() +
+  labs(x = "Date", y = "Count of detections", fill = "Treatment") +
+  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8"))
+
+ggsave(here("Output", "date_ranges.jpg"), plot = plot_date_range, width = 11, height = 7)
+
+```
+
+First day of a recording 9/21 (sept 21) 
+to last day of a recording 12/12 (dec 12)
+
+Recording range for each camera:
+```{r}
+results_deploy_final |>
+  group_by(deployment_num) |>
+  summarise(first_rec = min(date),
+            last_rec = max(date)) 
+
+results_deploy_final |>
+  group_by(treatment) |>
+  summarise(first_rec = min(date),
+            last_rec = max(date)) |>
+  group_by(treatment) |>
+  summarise(total_days = last_rec - first_rec)
+
+
+
+ results_deploy_final <- results_deploy_final |>
+  group_by(deployment_num) |>
+  mutate(first_rec = min(date),
+         last_rec = max(date))
+
+## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
+```
+
+
+
+
+### Species detected
+
+The species detected and how many times they were detected
+
+#### All sites
+```{r}
+library(pander)
+results_deploy_final |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+## the total number of species/sounds recorded across all sites
+length(unique(results_deploy_final$species))
+```
+
+#### Beavers
+
+```{r}
+## species list and number of detections
+results_deploy_beaver |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(results_deploy_beaver$species))
+```
+
+```{r}
+## species and number of detections at all beaver deployments (lumped)
+spp_numrec_depl_beaver <- results_deploy_beaver |>
+  group_by(deployment_num, species) |>
+  summarise(num_rec = n())
+spp_numrec_depl_beaver
+
+## the species and counts of each species recorded at each deployment (separated)
+
+## AM0063
+results_deploy_beaver |>
+  filter(deployment_num == "AM0063") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0064
+results_deploy_beaver |>
+  filter(deployment_num == "AM0064") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0081
+results_deploy_beaver |>
+  filter(deployment_num == "AM0081") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0083
+results_deploy_beaver |>
+  filter(deployment_num == "AM0083") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0087
+results_deploy_beaver |>
+  filter(deployment_num == "AM0087") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0094
+results_deploy_beaver |>
+  filter(deployment_num == "AM0094") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0095
+results_deploy_beaver |>
+  filter(deployment_num == "AM0095") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0096
+results_deploy_beaver |>
+  filter(deployment_num == "AM0096") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+```
+
+#### Control
+
+```{r}
+## species list and number of detections
+results_deploy_control |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(results_deploy_control$species)) ## more than half the number of species detected at beaver sites
+```
+
+
+```{r}
+## the species and counts of each species recorded at each control deployment (lumped)
+spp_numrec_depl_control <- results_deploy_control |>
+  group_by(deployment_num, species) |>
+  summarise(num_rec = n())
+spp_numrec_depl_control
+
+## the species and counts of each species recorded at each control deployment (separated)
+
+## AM0063
+results_deploy_control |>
+  filter(deployment_num == "AM0067") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0064
+results_deploy_control |>
+  filter(deployment_num == "AM0066") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0081
+results_deploy_control |>
+  filter(deployment_num == "AM0086") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0083
+results_deploy_control |>
+  filter(deployment_num == "AM0089") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0087
+results_deploy_control |>
+  filter(deployment_num == "AM0075") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0094
+results_deploy_control |>
+  filter(deployment_num == "AM0073") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0095
+results_deploy_control |>
+  filter(deployment_num == "AM0074") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+## AM0096
+results_deploy_control |>
+  filter(deployment_num == "AM0090") |>
+  group_by(species) |>
+  summarise(num_rec = n())
+
+```
+
+### High probability species detected
+
+```{r}
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+highprob_results_deploy |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+## the total number of species/sounds recorded across all sites
+length(unique(highprob_results_deploy$species))
+```
+
+```{r}
+highprob_results_deploy_beaver <- highprob_results_deploy |>
+  filter(treatment == "beaver")
+
+highprob_results_deploy_beaver |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(highprob_results_deploy_beaver$species))
+```
+
+```{r}
+highprob_results_deploy_control <- highprob_results_deploy |>
+  filter(treatment == "control")
+
+highprob_results_deploy_control |>
+  group_by(species) |>
+  summarise(num_instances_spp = n()) |>
+  pander()
+
+length(unique(highprob_results_deploy_control$species))
+```
+
+

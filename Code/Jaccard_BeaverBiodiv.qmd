@@ -1,0 +1,149 @@
+---
+title: "Jaccard Index - Beaver Biodiversity Analysis"
+author: Liz Anderson
+format: html
+---
+
+## Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+library(vegan)
+library(betapart) #turns on package for beta diversity (needed for Jaccard)
+library(rstatix) #turns on package with some matrix manipulation functions
+```
+
+```{r}
+## set up the data frames
+
+results_deploy_final <- read_csv(here("Data", "results_final.csv"))
+
+highprob_results_deploy <- results_deploy_final |>
+  filter(probability >= 0.8)
+
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+```
+
+## Set up file to use in Jaccard code
+
+```{r}
+## scale each species by average number of detections per day PER SITE
+
+scale_spp_setup <- results_wild |>
+  group_by(deployment_num) |>
+  mutate(date = ymd(date)) |>
+  mutate(first_rec = min(date),
+            last_rec = max(date)) |>
+  mutate(recording_days = last_rec - first_rec) |>
+  relocate(first_rec, last_rec, recording_days) |>
+  mutate(recording_days = as.numeric(recording_days))
+
+scale_spp_long <- scale_spp_setup |>
+  group_by(treatment, deployment_num, species, recording_days) |>
+  summarise(num_detections = n()) |> # check that there is variation in recording days variable
+  group_by(treatment, deployment_num, species) |>
+  summarise(av_spp_site = num_detections / recording_days)
+## standard deviation still doesn't work
+
+## I think this is what we want for Jaccard index
+
+```
+
+```{r}
+## now make wide so it can be used for jaccard/vegan
+
+scale_spp_wide <- scale_spp_long |>
+  pivot_wider(names_from = species, values_from = av_spp_site)
+
+scale_spp_wide[is.na(scale_spp_wide)] <- 0
+
+## select function was not working for some reason...
+
+scale_spp_wide_vegan <- scale_spp_wide[,-(1:2)]
+```
+
+
+
+
+### Jaccard index
+
+```{r}
+Jaccard <- betadiver(scale_spp_wide_vegan, "j") #j indicates to use the a/a+b+c formula
+#result is of class 'distance' - convert to a matrix
+Jaccard <- as.matrix(Jaccard)
+```
+
+_Determine the shared species between sites:_
+
+Now use `betapart`package to get shared species between sites. The function requires a set of presence/absence rather than abundance data so we have to convert our DF dataset to that.
+
+```{r}
+#requires a dataset of presence/absence data so make that first
+PresAb<-scale_spp_wide_vegan
+	
+PresAb[][PresAb[] != 0]<- 1 #assigns all values > 0  to 1 
+PresAb
+```
+Now we can run the function to get the number of shared species between each pair of plots.
+
+```{r}
+library(betapart)
+Beta<-betapart.core(PresAb)#result is a list; we just need one part
+Shared<-Beta$shared
+## this is little a, the number of species shared between the communities
+```
+
+_Create our display matrix_
+
+Now it would be ideal if we could create a matrix with number of shared species ("a") above the diagonal, species richness of each plot along the diagonal, and Jaccard index below the diagonal.
+
+Let's start by adding row and column names to our existing matrices to keep track of things.
+
+```{r}
+row.names(Jaccard)<-scale_spp_wide$deployment_num
+colnames(Jaccard)<-scale_spp_wide$deployment_num
+
+row.names(Shared)<-scale_spp_wide$deployment_num
+colnames(Shared)<-scale_spp_wide$deployment_num
+
+## adds row and column names so can see which communities are being compared
+```
+
+Since we want the number of shared species above the diagonal, let's start with the shared matrix. Conveniently, it also has the number of species per plot as its diagonal.
+
+So all we really need to do is put the Jaccard data below the diagonal.
+
+```{r}
+#using base r
+Shared[lower.tri(Shared)] <- Jaccard[lower.tri(Jaccard, diag = FALSE)]
+
+## puts jaccard below the diagonal
+
+Shared
+Shared <- Shared |>
+  round(digits = 3)
+```
+
+Write matrix and diversity indices to a csv:
+```{r}
+# write.csv(Shared, here("Output","JaccardMatrix.csv"), row.names = F)
+
+## row.names=F stops an extra column with row names
+
+```
+
+
+
+
+
+
+
+
+
+
+
