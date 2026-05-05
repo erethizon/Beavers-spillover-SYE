@@ -318,8 +318,65 @@ results_wild_mean_per_day <-
 ```
 now write this file to use for Jaccard, etc.
 ```{r}
-write_csv(results_wild_mean_per_day, here("Data/results_wild_mean_per_day.csv"))
+# write_csv(results_wild_mean_per_day, here("Data/results_wild_mean_per_day.csv"))
 ```
+
+### High probability run through
+Use `highprob_results_wild` data and run through the same code as above
+
+```{r}
+#run loop to complete rows and add 1s or 0s for detections
+loop_length <- length(unique(highprob_results_wild$deployment_num))
+deployments <- unique(highprob_results_wild$deployment_num)
+highprob_results_wild <- highprob_results_wild |> select(-`...1`)
+for(i in 1:loop_length){
+  HPdf <- highprob_results_wild |> 
+    filter(deployment_num == deployments[i]) |>
+    mutate(detection = 1)
+  HPfull_dates <- seq(min(df$date), max(df$date), by = "day")
+  #now complete the dates
+  HPdf_filled <- HPdf |>
+    group_by(treatment, deployment_num, species) |> 
+    complete(date = HPfull_dates)
+  #now fill in the nas in detection as 0
+  HPdf_filled <- HPdf_filled |>
+    mutate(detection = replace_na(detection, 0))
+  
+  #now save to master
+  if(i == 1){HPresults_wild_filled <- HPdf_filled} else {HPresults_wild_filled <- rbind(HPresults_wild_filled, HPdf_filled)}
+  #I think it worked
+ 
+}
+
+```
+Now get summary
+
+```{r}
+HPresults_wild_summary <- HPresults_wild_filled |>
+    group_by(treatment, deployment_num, date, species) |>
+    summarise(
+      num_rows = n(), 
+      num_detections = sum(detection, na.rm = T)
+    )
+```
+
+```{r}
+HPresults_wild_mean_per_day <-
+  HPresults_wild_summary |>
+  group_by(treatment, deployment_num, species) |>
+  summarise(
+    mean_detections_per_day = mean(num_detections, na.rm = T),
+    sd_detections_per_day = sd(num_detections, na.rm = T)
+  )
+```
+now write this file to use for Jaccard, etc.
+```{r}
+write_csv(HPresults_wild_mean_per_day, here("Data/HPresults_wild_mean_per_day.csv"))
+```
+
+
+
+
 
 ## How about mean and sd of number of species detected per day
 Using results_wild
@@ -383,6 +440,18 @@ num_sp_by_date_means <-
     mean_num_species_per_day = mean(num_species, na.rm = T),
     sd_num_sp_per_day = sd(num_species, na.rm = T)
   )
+```
+### Liz addition - make the data into a nice table
+For the table, will make most of adjustments in excel. Would like to put the treatment level at the top, then have headings for deployment number, mean, and sd under each. 
+```{r}
+write_csv(num_sp_by_date_means, here("Output", "num_spp_by_date_means.csv"))
+```
+```{r}
+## calculate the average species richness per day per treatment
+num_sp_by_date_means |>
+  group_by(treatment) |>
+  summarise(mean_sp_treatment = mean(mean_num_species_per_day),
+            sd_sp_treatment = sd(mean_num_species_per_day))
 ```
 
 

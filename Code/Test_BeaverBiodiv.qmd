@@ -34,107 +34,135 @@ highprob_results_wild <- results_wild |>
 
 Use this code: `wilcox.test(values ~ groups, data = df)` to run a non-paired Wilcoxon test - does not assume that the data is normally distributed
 
-First need the data in a wide format for vegan - and need it scaled with the deployment sites
+
 
 Using the dataset without anthropogenic noise
 
+
+### Species richness per site and treatment
+
+
 ```{r}
-scale_for_wide <- results_wild |> 
-  group_by(treatment, deployment_num, date, species) |>
+results_wild_wide <- results_wild |>
+  group_by(treatment, deployment_num, species) |>
   summarise(num_detections = n()) |>
-  group_by(treatment, deployment_num) |>
-  mutate(first_day = min(date),
-            last_day = max(date),
-            total_day = last_day - first_day) |>
-  mutate(total_day = as.numeric(total_day)) |>
-  group_by(treatment, deployment_num, species, total_day) |>
-  summarise(total_detections = sum(num_detections)) |>
-  summarise(average_detections_day = total_detections/total_day)
+  pivot_wider(names_from = species, values_from = num_detections)
 
-scaled_day_wide <- scale_for_wide |>
-  pivot_wider(names_from = species, values_from = average_detections_day)
 
-scaled_day_wide[is.na(scaled_day_wide)] <- 0
+results_wild_wide[is.na(results_wild_wide)] <- 0
 
-scaled_day_wide
+results_wild_vegan <- results_wild_wide |>
+  ungroup() |>
+  select(-treatment, -deployment_num)
 ```
 
 ```{r}
-## set up dataframe
-Div_Indices <- scaled_day_wide[,1:2]
-Div_Indices$SR <- specnumber(scaled_day_wide)
-Div_Indices
+Div_Indices_notscaled <- results_wild_wide[,1:2]
+Div_Indices_notscaled$SR <- specnumber(results_wild_vegan) 
+Div_Indices_notscaled ## this is giving the same +2 values for SR...
 ```
+#### Wilcoxon Test
 
 Now that I have the species richness I can run the Wilcoxon test
 ```{r}
-wilcox.test(SR ~ treatment, data = Div_Indices) ## just significant enough -- p-value 0.06429
+wilcox.test(SR ~ treatment, data = Div_Indices_notscaled) ## just significant enough -- p-value 0.06429
+
+t.test(SR ~ treatment, data = Div_Indices_notscaled)
 ```
-Plot
+#### Plot
+Option 1 - boxplot, doesn't show means but shows distibution
+Could add a point for mean
 ```{r}
-SR_plot_flip <- ggplot(data = Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
+overall_mean_SR <- Div_Indices_notscaled |>
+  group_by(treatment) |>
+  summarise(mean_overall_SR = mean(SR),
+            sd_overall_SR = sd(SR))
+```
+
+
+Option 2 - could do what I did for another plot and have each site as a point, the means as a point and error bars for the means
+```{r}
+## Option 1
+SR_plot_and_mean <- 
+  ggplot(data = Div_Indices_notscaled, aes(x = treatment, y = SR, fill = treatment)) +
   geom_boxplot()+
   geom_point() +
+  geom_point(data = overall_mean_SR, aes(x = treatment, y = mean_overall_SR), shape = 21, fill = "#edf8b1", color = "black", size = 5) +
   labs(x = "Treatment", y = "Species Richness") +
   theme_bw() +
   coord_flip() +
   scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  scale_y_continuous(breaks = seq(0, 12, by = 1))
   
-ggsave(here("Output", "SR_Plot_flip.jpg"), plot = SR_plot_flip, width = 11.25, height = 4.5, units = "in")
+ggsave(here("Output", "SR_plot_and_mean.jpg"), plot = SR_plot_and_mean, width = 11.25, height = 4.5, units = "in")
+```
+
+```{r}
+## option 2
+
+ggplot(data = overall_mean_SR, aes(x = treatment, y = mean_overall_SR)) +
+  geom_errorbar(data = overall_mean_SR, aes(ymin = mean_overall_SR - sd_overall_SR, ymax = mean_overall_SR + sd_overall_SR, color = treatment), width = 0.2, linewidth = 1) +
+  geom_point(shape = 21, fill = "#edf8b1", colour = "black", size = 6, stroke = 1) +
+  geom_point(data = Div_Indices_notscaled, aes(x = treatment, y = SR), size = 2) +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme_bw()+
+  theme(legend.position = "none") +
+  labs(x = "Treatment", y = "Species richness per site")
+```
+
+#### Mann-Whitney U test
+
+```{r}
+wilcox.test(SR ~ treatment, data = Div_Indices_notscaled)
+
+
 ```
 
 
-## Run it again for 0.8 confidence score
 
-highprob_results_wild
-
+### Spp richness High conf
 ```{r}
-highprob_scale_for_wide <- highprob_results_wild |> 
-  group_by(treatment, deployment_num, date, species) |>
+highprob_results_wild_wide <- highprob_results_wild |>
+  group_by(treatment, deployment_num, species) |>
   summarise(num_detections = n()) |>
-  group_by(treatment, deployment_num) |>
-  mutate(first_day = min(date),
-            last_day = max(date),
-            total_day = last_day - first_day) |>
-  mutate(total_day = as.numeric(total_day)) |>
-  group_by(treatment, deployment_num, species, total_day) |>
-  summarise(total_detections = sum(num_detections)) |>
-  summarise(average_detections_day = total_detections/total_day)
+  pivot_wider(names_from = species, values_from = num_detections)
 
-highprob_scaled_day_wide <- highprob_scale_for_wide |>
-  pivot_wider(names_from = species, values_from = average_detections_day)
 
-highprob_scaled_day_wide[is.na(highprob_scaled_day_wide)] <- 0
+highprob_results_wild_wide[is.na(highprob_results_wild_wide)] <- 0
 
-highprob_scaled_day_wide
+highprob_results_wild_wide
+
+HP_results_wild_vegan <- highprob_results_wild_wide |>
+  ungroup() |>
+  select(-treatment, -deployment_num)
 ```
 
 ```{r}
-## set up dataframe
-Highprob_Div_Indices <- highprob_scaled_day_wide[,1:2]
-Highprob_Div_Indices$SR <- specnumber(highprob_scaled_day_wide)
-Highprob_Div_Indices
+HP_Div_Indices_notscaled <- highprob_results_wild_wide[,1:2]
+HP_Div_Indices_notscaled$SR <- specnumber(HP_results_wild_vegan) 
+HP_Div_Indices_notscaled ## this is giving the same +2 values for SR compared to the Jaccard
+```
+```{r}
+HP_Div_Indices_notscaled |>
+  group_by(treatment) |>
+  summarise(mean_overall = mean(SR),
+            sd_overall = sd(SR))
 ```
 
+
+#### Test
 ```{r}
-wilcox.test(SR ~ treatment, data = Highprob_Div_Indices) ## not significant - p value 0.1122
-```
-Plot
-```{r}
-highprob_SR_plot_flip <- ggplot(data = Highprob_Div_Indices, aes(x = treatment, y = SR, fill = treatment)) +
-  geom_boxplot()+
-  geom_point() +
-  labs(x = "Treatment", y = "Species Richness") +
-  theme_bw() +
-  coord_flip() +
-  scale_fill_manual(values = c("#7fcdbb", "#2c7fb8")) +
-  theme(legend.position = "none")
-  
-ggsave(here("Output", "highprob_SR_Plot_flip.jpg"), plot = highprob_SR_plot_flip, width = 11.25, height = 4.5, units = "in")
+wilcox.test(SR ~ treatment, data = HP_Div_Indices_notscaled) ## 0.1122
+
+t.test(SR ~ treatment, data = HP_Div_Indices_notscaled) ## 0.067
 ```
 
-## Species Richness tables
+
+
+
+
+## Species Richness tables 
 
 Get a table to put in paper with the species richness of each site with a column for beaver and a column for control (and maybe also separated by confidence score? - although doesn't change much)
 
@@ -157,7 +185,7 @@ Highprob_Div_Indices |>
             sd_SR = sd(SR))
 ```
 
-## Trying again with correctly scaled data
+## Species Richness scaled per day
 
 ### is there a difference in the number of species detected per day between treatments?
 

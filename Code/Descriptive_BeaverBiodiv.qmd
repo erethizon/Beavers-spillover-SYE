@@ -153,6 +153,30 @@ results_deploy_final |>
 ## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
 ```
 
+#### mean deployment length
+Get the mean number of days that the AM was recording in the field for each treatment
+
+```{r}
+days_recording <- results_deploy_final |>
+  group_by(treatment, deployment_num) |>
+  summarise(first_rec = min(date),
+            last_rec = max(date)) |>
+  mutate(total_days = last_rec - first_rec)
+
+days_recording |>
+  group_by(treatment) |>
+  summarise(mean_days = mean(total_days),
+            sd_days = sd(total_days))
+
+days_recording |>
+  group_by(treatment) |>
+  summarise(min = min(total_days),
+            max = max(total_days))
+```
+
+
+
+
 ```{r}
 library(lubridate)
 glimpse(results_deploy_final)

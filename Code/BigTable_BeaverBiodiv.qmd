@@ -108,7 +108,81 @@ joined_all <- joined_all |>
 Now the table is ready to write to csv
 
 ```{r}
-write_csv(joined_all, here("Output", "mean_perspp_pertreatment_perday.csv"))
+# write_csv(joined_all, here("Output", "mean_perspp_pertreatment_perday.csv"))
 ```
+
+## high prob data should also go in the table
+
+Run through the same steps to get means and sd for high prob data
+
+Then I can join that to the table and do some fiddling around in excel for the final
+
+```{r}
+HP_table <- read_csv(here("Data", "HPresults_wild_mean_per_day.csv"))
+```
+
+```{r}
+## use tidyr - this takes all possible pairings of deployment_num and species and gives them a row
+
+HPfilled_df <- HP_table |>
+  complete(deployment_num, species, fill = list(mean_detections_per_day = 0, sd_detections_per_day = 0))
+
+HPfilled_df <- HPfilled_df |>
+  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+                             true = "control",
+                             false = "beaver"))
+```
+
+Now take the mean detections per day per each species per treatment
+```{r}
+HPmean_det_treatment <- HPfilled_df |>
+  group_by(treatment, species) |>
+  summarise(mean_det_day = mean(mean_detections_per_day),
+            sd_det_day = sd(mean_detections_per_day))
+
+```
+
+Want to arrange by the species with highest mean detections in the beaver sites
+```{r}
+HPmeans_join <- HPmean_det_treatment |>
+  select(-sd_det_day) |>
+  pivot_wider(names_from = treatment, values_from = mean_det_day) |>
+  arrange(desc(beaver)) |>
+  rename(HP_mean_beaver = "beaver",
+         HP_mean_control = "control")
+
+HPsd_join <- HPmean_det_treatment |>
+  select(-mean_det_day) |>
+  pivot_wider(names_from = treatment, values_from = sd_det_day) |>
+  rename(HP_sd_beaver = "beaver",
+         HP_sd_control = "control")
+
+HPjoined <- left_join(HPmeans_join, HPsd_join, by = join_by(species))
+
+HPjoined <- HPjoined |>
+  relocate(HP_sd_beaver, .after = HP_mean_beaver)
+```
+
+Now join the HP_joined with the normal joined
+
+
+```{r}
+joined_everything <- left_join(joined_all, HPjoined, by = join_by(species))
+
+joined_everything <- joined_everything |>
+  relocate(HP_mean_beaver, .after = sd_beaver) |>
+  relocate(HP_sd_beaver, .after = HP_mean_beaver) |>
+  relocate(HP_mean_control, .after = sd_control) |>
+  relocate(HP_sd_control, .after = HP_mean_control)
+```
+
+
+Now write this csv to modify in excel
+
+```{r}
+write_csv(joined_everything, here("Output", "LP_HP_mean_detections_day_table.csv"))
+```
+
+
 
 
