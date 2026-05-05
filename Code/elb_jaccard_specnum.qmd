@@ -5,6 +5,7 @@ editor: visual
 ---
 
 ## Set up
+
 ```{r}
 rm(list=ls())
 library(here)
@@ -15,9 +16,11 @@ library(rstatix) #turns on package with some matrix manipulation functions
 ```
 
 Read in data
+
 ```{r}
 jaccard <- read_csv(here("Data/results_wild_mean_per_day.csv"))
 ```
+
 Get rid of SD and pivot wider
 
 ```{r}
@@ -25,6 +28,7 @@ jaccard <- jaccard |>
   select(-sd_detections_per_day)|>
   pivot_wider(names_from = species, values_from = mean_detections_per_day)
 ```
+
 Now get a version where we 1) replace all NA values with 0 and 2)replace all values that are not NA with 1 for presence/absence.
 
 ```{r}
@@ -33,6 +37,7 @@ jaccard_ra <- jaccard
 jaccard_ra[is.na(jaccard_ra)] <- 0
   
 ```
+
 Apparentely, Jaccard should really use a presence/absence matrix, which we will also use for shared species between sites.
 
 ```{r}
@@ -42,6 +47,7 @@ PresAb<-jaccard_ra
 PresAb[, 3:36][PresAb[, 3:36] != 0]<- 1 #assigns all values > 0  to 1 
 PresAb
 ```
+
 Now we have two dataframes, jaccard_ra which includes mean detections per species per day and PresAb, which includes 1 = present and 0 = absent.
 
 What happens if you calculate Jaccard index on a dataframe with relative abundance?
@@ -51,40 +57,40 @@ Jaccard_rel_abund <- betadiver(jaccard_ra[, 3:38], "j") #j indicates to use the 
 #result is of class 'distance' - convert to a matrix
 Jaccard_rel_abund <- as.matrix(Jaccard_rel_abund)
 ```
+
 And on a presence-absence dataframe?
 
 ```{r}
 Jaccard_pres_abs <- betadiver(PresAb[,3:38], "j")
 Jaccard_pres_abs <- as.matrix(Jaccard_pres_abs)
 ```
+
 Are the results the same?
+
 ```{r}
 Jaccard_pres_abs == Jaccard_rel_abund
 ```
+
 Yep - gives same result. So package is automatically converting to presence/absense data.
 
-How about species richness?
-Set up space to hold results
+How about species richness? Set up space to hold results
 
 ```{r}
 div_results <- jaccard_ra[,1:2]
 ```
+
 Species richness
+
 ```{r}
 div_results$SR_rel_abundance <- specnumber(jaccard_ra[,3:38]) #using relative abundance in df
 div_results$SR_pres_abs <- specnumber(PresAb[,3:38]) #using presence absence
 ```
+
 Where it should matter is with simpson/shannon
 
 ```{r}
 div_results$Shannon_rel_abundance <- diversity(jaccard_ra[,3:38], index = "shannon")
 div_results$Shannon_pres_absence <- diversity(PresAb[,3:38], index = "shannon")
 ```
+
 Ok, working as expected.
-
-
-
-
-
-
-

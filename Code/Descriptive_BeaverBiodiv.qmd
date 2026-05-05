@@ -153,6 +153,60 @@ results_deploy_final |>
 ## mutate a new column with lubridate to get number of deployment days for each - then group and summarize for each detector and species 
 ```
 
+```{r}
+library(lubridate)
+glimpse(results_deploy_final)
+
+dates <- results_deploy_final |>
+  select(deployment_num, treatment, dropoff_date, pickup_date, first_rec, last_rec) |>
+  mutate(dropoff_date = dmy(dropoff_date),
+         pickup_date = dmy(pickup_date)) |>
+  group_by(treatment, deployment_num) |>
+  summarise(dropoff = min(dropoff_date, na.rm = T),
+            pickup = max(pickup_date, na.rm = T),
+            first_rec = min(first_rec),
+            last_rec = max(last_rec))
+
+dates ## some issues with missing values for control sites
+
+## based off tibble, earliest deployment/firstrec was Sept 21 and latest deployment/first rec was Nov 19. 
+
+tibble <- tibble(date_1 = c("2025-09-21"), date_2 = "2025-11-19")
+
+tibble |>
+  mutate(date_1 = ymd(date_1),
+         date_2 = ymd(date_2)) |>
+  mutate(diff = date_2 - date_1) |>
+  mutate(diff = week(diff))
+
+
+start_date <- ymd("2025-09-21")
+end_date <- ymd("2025-11-19")
+
+# Calculate weeks
+weeks_between <- interval(start_date, end_date) / dweeks(1)
+```
+
+
+### Total species detections
+For sentence: in total there were __ species detections at beaver sites and __ species detections at control sites
+
+```{r}
+## want to use just the species for this (not anthropogenic)
+results_wild <- results_deploy_final |>
+  filter(species != "Engine" & species != "Dog")
+
+highprob_results_wild <- results_wild |>
+  filter(probability >= 0.8)
+
+results_wild |>
+  group_by(treatment) |>
+  summarise(n_detections = n())
+
+highprob_results_wild |>
+  group_by(treatment) |>
+  summarise(n_detections = n())
+```
 
 
 

@@ -1,0 +1,114 @@
+---
+title: "Table - Beaver Biodiv Analysis"
+author: Liz Anderson
+format: html
+---
+
+Use data generated from elb_Scaling_BeaverBiodiv.qmd to make a table to include in thesis chapter 2
+
+The table will have the full list of species that were detected, and the mean and species richness for both the beaver sites and control sites
+
+Set up
+```{r}
+rm(list=ls())
+library(here)
+library(tidyverse)
+```
+Read in the data
+```{r}
+table_df <- read_csv(here("Data", "results_wild_mean_per_day.csv"))
+```
+
+```{r}
+## I need the mean detections per day across the full treatment - one value for each species for each treatment.
+
+table_df |>
+  group_by(treatment, species) |>
+  summarise(mean_det_day_treatment = mean(mean_detections_per_day),
+            sd_det_day_treatment = sd(mean_detections_per_day)) |>
+  view()
+
+## Realized that when taking the mean here it is the mean of all the rows of that species, so for a species only detected at one site is is keeping that value, but taking the average by the number of sites
+
+
+```
+
+```{r}
+# all_deployments <- c("AM0063", "AM0064", "AM0081", "AM0083", "AM0087", "AM0094", "AM0095", "AM0096", "AM0067", "AM0066", "AM0086", "AM0089", "AM0075", "AM0073", "AM0074", "AM0090")
+
+# all_treatment = c("beaver", "beaver", "beaver", "beaver", "beaver", "beaver", "beaver", "beaver", "control", "control", "control", "control", "control", "control", "control", "control")
+
+
+
+## use tidyr - this takes all possible pairings of deployment_num and species and gives them a row
+
+filled_df <- table_df |>
+  complete(deployment_num, species, fill = list(mean_detections_per_day = 0, sd_detections_per_day = 0))
+
+filled_df <- filled_df |>
+  mutate(treatment = if_else(deployment_num == "AM0067" | deployment_num == "AM0066" | deployment_num == "AM0086" | deployment_num == "AM0089" | deployment_num == "AM0075" | deployment_num == "AM0073" | deployment_num == "AM0074" | deployment_num == "AM0090" | deployment_num == "AM0065",
+                             true = "control",
+                             false = "beaver"))
+```
+
+Now take the mean detections per day per each species per treatment
+```{r}
+mean_det_treatment <- filled_df |>
+  group_by(treatment, species) |>
+  summarise(mean_det_day = mean(mean_detections_per_day),
+            sd_det_day = sd(mean_detections_per_day))
+
+```
+
+
+Want to arrange by the species with highest mean detections in the beaver sites
+```{r}
+means_join <- mean_det_treatment |>
+  select(-sd_det_day) |>
+  pivot_wider(names_from = treatment, values_from = mean_det_day) |>
+  arrange(desc(beaver)) |>
+  rename(mean_beaver = "beaver",
+         mean_control = "control")
+
+sd_join <- mean_det_treatment |>
+  select(-mean_det_day) |>
+  pivot_wider(names_from = treatment, values_from = sd_det_day) |>
+  rename(sd_beaver = "beaver",
+         sd_control = "control")
+
+joined <- left_join(means_join, sd_join, by = join_by(species))
+
+joined <- joined |>
+  relocate(sd_beaver, .after = mean_beaver)
+```
+
+Want the proportion of sites that the species was detected at as a column in table to
+```{r}
+## go back to filled_df
+
+prop_sites <- filled_df |>
+  mutate(present = if_else(mean_detections_per_day == 0.00000000,
+                           true = 0,
+                           false = 1)) |>
+  group_by(treatment, species) |>
+  summarise(prop_sites = mean(present)) |>
+  pivot_wider(names_from = treatment, values_from = prop_sites) |>
+  rename(prop_beaver = "beaver",
+         prop_control = "control")
+```
+
+Now join the proportion data with the mean and sd dataframe
+```{r}
+joined_all <- left_join(joined, prop_sites, by = join_by(species))
+
+joined_all <- joined_all |>
+  relocate(prop_beaver, .after = sd_beaver)
+```
+
+Now the table is ready to write to csv
+
+```{r}
+write_csv(joined_all, here("Output", "mean_perspp_pertreatment_perday.csv"))
+```
+
+
