@@ -157,4 +157,46 @@ Highprob_Div_Indices |>
             sd_SR = sd(SR))
 ```
 
+## Trying again with correctly scaled data
+
+### is there a difference in the number of species detected per day between treatments?
+
+```{r}
+scaled_numspp_day <- read_csv(here("Output", "num_spp_by_date_means.csv"))
+```
+```{r}
+scaled_numspp_day
+```
+```{r}
+wilcox.test(mean_num_species_per_day ~ treatment, data = scaled_numspp_day)
+## p = 0.2698
+
+t.test(mean_num_species_per_day ~ treatment, data = scaled_numspp_day)
+
+## both not significant at 0.5
+```
+
+Plot to visualize a trend
+
+```{r}
+grand_mean_num_day_treament <- num_sp_by_date_means |>
+  group_by(treatment) |>
+  summarise(mean_sp_treatment = mean(mean_num_species_per_day),
+            sd_sp_treatment = sd(mean_num_species_per_day))
+
+plot_meanspp_day_treatment <- ggplot(data = grand_mean_num_day_treament, aes(x = treatment, y = mean_sp_treatment)) +
+  geom_errorbar(data = grand_mean_num_day_treament, aes(ymin = mean_sp_treatment - sd_sp_treatment, ymax = mean_sp_treatment + sd_sp_treatment, color = treatment), width = 0.2, linewidth = 1) +
+  geom_point(shape = 21, fill = "#edf8b1", colour = "black", size = 6, stroke = 1) +
+  geom_point(data = scaled_numspp_day, aes(x = treatment, mean_num_species_per_day), size = 2) +
+  scale_color_manual(values = c("#7fcdbb", "#2c7fb8")) +
+  theme_bw()+
+  theme(legend.position = "none") +
+  labs(x = "Treatment", y = "Mean number of species detected per day")
+
+ggsave(here("Output", "mean_spp_day_treatment.png"), plot = plot_meanspp_day_treatment, width = 7, height = 5.5)
+```
+
+
+
+
 
