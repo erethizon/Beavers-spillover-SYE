@@ -1,0 +1,119 @@
+---
+title: "Dirichlet regression"
+format: html
+editor: visual
+---
+
+## Dirichlet regression
+
+Challenge: Liz has data on the proportion of habitat at beaver ponds that falls under different land use categories. Since the data are proportional and should add to 100%, a change (increase or decrease) in one habitat type will automatically indicate a proportional change in other habitat types – thus, the habitat types are dependent.
+
+We can model proporitonal data with a beta regression when we have 2 categories, and Dirichlet regression when the dataset includes more than 2 categories of what is considered *continuous proportional data*. See [this paper](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.13234) for details.
+
+## Set up and pull in date
+
+```{r}
+rm(list = ls())
+library(tidyverse)
+library(here)
+library(DirichletReg)
+library(lmtest)
+library(reshape)
+library(ggtern)
+
+```
+
+Get the data
+## Landcover data
+
+```{r}
+lulc <- read.csv(here("Data", "LULC_spillover_diversity.csv"))
+glimpse(lulc)
+```
+To do:
+* Convert to long
+* filter to just the percentages
+
+```{r}
+lulc_narrow <- lulc |>
+  select(1, 2, 17:29) 
+glimpse(lulc_narrow)
+glimpse(lulc)
+
+lulc_combined <- lulc_narrow |>
+  mutate(p_Developed = p_Developed_open + p_Developed_low_intensity + p_Developed_med_intensity) |>
+  mutate(p_water = p_Open_water + p_Woody_wetlands + p_Emergent_herb_wetlands) |>
+  mutate(p_forest = p_Deciduous + p_Evergreen + p_Mixed_forest) |>
+  mutate(p_grassy = p_Grassland_herbaceous + p_Pasture_hay + p_Shrub_scrub) |>
+  relocate(p_Developed, p_water, p_forest, p_grassy, .after = area_ha) |>
+  mutate(treatment = if_else(DEPLOYMENT_NUM == "AM0067" | DEPLOYMENT_NUM == "AM0066" | DEPLOYMENT_NUM == "AM0086" | DEPLOYMENT_NUM == "AM0089" | DEPLOYMENT_NUM == "AM0075" | DEPLOYMENT_NUM == "AM0073" | DEPLOYMENT_NUM == "AM0074" | DEPLOYMENT_NUM == "AM0090" | DEPLOYMENT_NUM == "AM0065",
+                             true = "control",
+                             false = "beaver")) |>
+  relocate(treatment)
+  
+```
+
+That all came from Liz's code in `high_prop_beaver_biodiv.qmd`. 
+Now make long so that i have a "habitat" variable with the different land use types.
+
+```{r}
+lulc_long <- lulc_combined |>
+  pivot_longer(cols = p_Developed:p_grassy, names_to = "LU_category", values_to = "percent") |>
+  select(treatment, DEPLOYMENT_NUM, area_ha, LU_category, percent)
+```
+
+Visualize
+```{r}
+ggplot(lulc_long, aes(LU_category, percent, color = treatment))+
+  geom_point()+
+  facet_wrap(~area_ha)
+```
+
+Now fit model. Basically asking does percent of land in each category differ as a function of treatment or scale (7.7 vs. 17.6 ha)
+
+The model will break if there are zeros for any of the data, so one solution is to put in a very small number for all the zero values. Let's do that:
+```{r}
+lulc_long <- lulc_long |>
+  mutate(
+    new_percent = case_when(
+      percent == 0 ~ 0.001,
+      percent != 0 ~ percent
+    )
+  )
+```
+
+Now plot again:
+```{r}
+ggplot(lulc_long, aes(LU_category,  percent, color = treatment))+
+  geom_jitter()+
+  facet_grid(treatment~area_ha)+
+  coord_flip()
+```
+
+Now model:
+
+I think we need wide format data for the regression package:
+
+Need a matrix or data frame with nonnegative values of all of the compositional variables. 
+
+
+Use LULC combined
+```{r}
+lulc_for_reg <- lulc_combined |>
+  select(treatment:p_grassy)
+```
+
+fill in zeroes
+```{r}
+lulc_for_reg <- lulc_for_reg |>
+  mutate(
+    p_Developed = case_when(p_Developed == 0 ~0.001,
+                            p_Developed != 0 ~ p_Developed),
+    p_water = case_when(p_water == 0 ~0.001, p_water!= 0 ~ p_water),
+    p_forest = case_when(p_forest == 0 ~0.001, p_forest!= 0 ~ p_forest),
+    p_grassy = case_when(p_grassy == 0 ~0.001, p_grassy != 0 ~ p_grassy)
+  )
+```
+
+
+
